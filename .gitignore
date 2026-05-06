@@ -51,6 +51,7 @@ docs/
 # OS
 .DS_Store
 Thumbs.db
+.gitignore
 
 # 私密文档（项目无关）
 智能应用需求描述.docx
