@@ -1,0 +1,764 @@
+<template>
+  <div class="chat-layout">
+    <!-- 左侧导航栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <el-icon class="logo-icon"><Search /></el-icon>
+        <span class="app-title">深度研究</span>
+      </div>
+      
+      <div class="new-research-btn">
+        <el-button type="primary" :icon="Plus" @click="startNewResearch" block>
+          开启新研究
+        </el-button>
+      </div>
+
+      <div class="history-list">
+        <div class="history-label">快捷指令</div>
+        <div 
+          v-for="(action, index) in quickActions" 
+          :key="index"
+          class="history-item"
+          @click="useQuickAction(action)"
+        >
+          <el-icon><component :is="action.icon" /></el-icon>
+          <span>{{ action.label }}</span>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="model-badge">
+          <el-icon><Cpu /></el-icon>
+          <span>{{ currentModel }}</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右侧主聊天区 -->
+    <main class="chat-main">
+      <div class="chat-container">
+        <!-- 消息列表 -->
+        <div class="message-wrapper" ref="messageContainer">
+          <div v-if="messages.length === 0" class="empty-state">
+            <div class="welcome-card">
+              <h2>你好，我是深度研究助手</h2>
+              <p>我可以帮你进行深度研究、联网搜索和生成专业报告。</p>
+              <div class="suggestion-chips">
+                <el-tag 
+                  v-for="tag in ['环境检测未来发展如何', 'AI在医疗领域的应用', '新能源汽车市场分析']" 
+                  :key="tag"
+                  class="suggestion-tag"
+                  @click="userInput = tag"
+                >
+                  {{ tag }}
+                </el-tag>
+              </div>
+            </div>
+          </div>
+
+          <div 
+            v-for="(msg, index) in messages" 
+            :key="index" 
+            class="message-row"
+            :class="msg.role"
+          >
+            <div class="avatar">
+              <el-icon v-if="msg.role === 'user'"><User /></el-icon>
+              <el-icon v-else><Service /></el-icon>
+            </div>
+            <div class="message-bubble">
+              <!-- 加载中显示状态指示器 -->
+              <div v-if="!msg.content && msg.isLoading" class="streaming-status">
+                <div class="thinking-dots">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                <span class="status-text">{{ msg.statusText || 'AI 正在思考中...' }}</span>
+              </div>
+              
+              <!-- 有内容时显示文字 -->
+              <div v-else-if="msg.content" class="message-content">
+                <div class="message-text" v-html="formatMessage(msg.content)"></div>
+                <span v-if="msg.isStreaming" class="cursor-blink">▍</span>
+              </div>
+              
+              <!-- 节点执行信息 -->
+              <div v-if="msg.nodeInfo && msg.nodeInfo.length > 0" class="node-info-section">
+                <div class="node-info-header">
+                  <el-icon><Operation /></el-icon>
+                  <span>执行过程</span>
+                </div>
+                <div class="node-info-list">
+                  <div 
+                    v-for="(node, idx) in msg.nodeInfo" 
+                    :key="idx"
+                    class="node-info-item"
+                    :class="`node-${node.type}`"
+                  >
+                    <span class="node-icon">{{ getNodeIcon(node.type) }}</span>
+                    <span class="node-message">{{ node.message }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部输入框 -->
+        <div class="input-area">
+          <div class="input-box">
+            <el-input
+              v-model="userInput"
+              type="textarea"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              placeholder="输入研究问题..."
+              @keyup.enter.ctrl="sendMessage"
+              :disabled="isLoading"
+              resize="none"
+            />
+            <el-button 
+              type="primary" 
+              circle 
+              :icon="Promotion"
+              @click="sendMessage"
+              :loading="isLoading"
+              :disabled="!userInput.trim()"
+              class="send-btn"
+            />
+          </div>
+          <div class="input-tip">按 Ctrl + Enter 发送</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { ref, nextTick, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { 
+  Search, Plus, User, Service, Promotion, Cpu, Operation
+} from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import api from '@/api/research'
+import { useResearchStore } from '@/stores/research'
+
+const route = useRoute()
+const router = useRouter()
+const researchStore = useResearchStore()
+
+const userInput = ref('')
+const messages = ref([])
+const isLoading = ref(false)
+const messageContainer = ref(null)
+const currentModel = ref('openrouter/free')
+const researchId = ref(route.params.id)
+
+const quickActions = ref([
+  { label: '环境检测', icon: 'Monitor', query: '环境检测未来发展如何' },
+  { label: 'AI应用', icon: 'Cpu', query: 'AI在医疗领域的应用' },
+  { label: '市场分析', icon: 'TrendCharts', query: '新能源汽车市场分析' },
+  { label: '技术趋势', icon: 'DataAnalysis', query: '量子计算技术发展现状' },
+])
+
+// 格式化消息（支持Markdown）
+const formatMessage = (content) => {
+  if (!content) return ''
+  let formatted = content
+    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\n/g, '<br>')
+  return formatted
+}
+
+// 获取节点图标
+const getNodeIcon = (type) => {
+  const iconMap = {
+    'info': 'ℹ️',
+    'success': '✅',
+    'warning': '⚠️',
+    'error': '❌'
+  }
+  return iconMap[type] || 'ℹ️'
+}
+
+const scrollToBottom = async () => {
+  await nextTick()
+  if (messageContainer.value) {
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+  }
+}
+
+const startNewResearch = () => {
+  router.push({ name: 'home' })
+}
+
+const useQuickAction = (action) => {
+  userInput.value = action.query
+  sendMessage()
+}
+
+const sendMessage = async () => {
+  if (!userInput.value.trim() || isLoading.value) return
+
+  const userMessage = userInput.value.trim()
+  
+  // 添加用户消息
+  messages.value.push({ 
+    role: 'user', 
+    content: userMessage,
+    isLoading: false,
+    isStreaming: false,
+    nodeInfo: []
+  })
+  
+  userInput.value = ''
+  isLoading.value = true
+  
+  // 添加助手消息（初始为空）
+  const assistantMsgIndex = messages.value.length
+  messages.value.push({ 
+    role: 'assistant', 
+    content: '',
+    isLoading: true,
+    isStreaming: false,
+    statusText: '开始分析您的问题...',
+    nodeInfo: []
+  })
+  
+  await scrollToBottom()
+
+  try {
+    // 开始研究
+    const response = await researchStore.startResearch(userMessage)
+    researchId.value = response.research_id
+    
+    // 更新助手消息状态
+    messages.value[assistantMsgIndex].statusText = '研究已开始，正在执行工作流...'
+    
+    // 轮询获取进度和日志
+    await pollProgress(assistantMsgIndex)
+    
+  } catch (error) {
+    console.error('研究失败:', error)
+    messages.value[assistantMsgIndex].content = `研究失败：${error.message}`
+    messages.value[assistantMsgIndex].isLoading = false
+  } finally {
+    isLoading.value = false
+    await scrollToBottom()
+  }
+}
+
+// 轮询进度
+const pollProgress = async (assistantMsgIndex) => {
+  const pollInterval = setInterval(async () => {
+    try {
+      const progress = await api.getProgress(researchId.value)
+      
+      // 更新节点信息
+      if (progress.progress_logs && progress.progress_logs.length > 0) {
+        messages.value[assistantMsgIndex].nodeInfo = progress.progress_logs
+        
+        // 根据最新日志更新状态文本
+        const lastLog = progress.progress_logs[progress.progress_logs.length - 1]
+        if (lastLog) {
+          messages.value[assistantMsgIndex].statusText = lastLog.message
+        }
+      }
+      
+      await scrollToBottom()
+      
+      // 如果研究完成，停止轮询并获取报告
+      if (progress.status === 'completed') {
+        clearInterval(pollInterval)
+        messages.value[assistantMsgIndex].isLoading = false
+        messages.value[assistantMsgIndex].isStreaming = true
+        messages.value[assistantMsgIndex].statusText = '正在生成研究报告...'
+        
+        // 流式获取报告
+        await streamReport(assistantMsgIndex)
+      }
+    } catch (error) {
+      console.error('获取进度失败:', error)
+    }
+  }, 2000) // 每2秒轮询一次
+}
+
+// 流式获取报告
+const streamReport = async (assistantMsgIndex) => {
+  return new Promise((resolve, reject) => {
+    const eventSource = api.streamReport(
+      researchId.value,
+      // onChunk
+      (content) => {
+        if (content) {
+          messages.value[assistantMsgIndex].content += content
+          scrollToBottom()
+        }
+      },
+      // onDone
+      () => {
+        messages.value[assistantMsgIndex].isStreaming = false
+        messages.value[assistantMsgIndex].statusText = '研究完成！'
+        ElMessage.success('研究报告生成完成！')
+        resolve()
+      },
+      // onError
+      (error) => {
+        console.error('流式输出失败:', error)
+        messages.value[assistantMsgIndex].isStreaming = false
+        messages.value[assistantMsgIndex].statusText = '报告生成完成（流式失败）'
+        reject(error)
+      }
+    )
+  })
+}
+
+// 监听路由变化，加载已有研究
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    researchId.value = newId
+    loadExistingResearch()
+  }
+}, { immediate: true })
+
+const loadExistingResearch = async () => {
+  if (!researchId.value) return
+  
+  try {
+    const research = await researchStore.getProgress(researchId.value)
+    
+    // 添加用户消息
+    messages.value.push({
+      role: 'user',
+      content: research.query,
+      isLoading: false,
+      isStreaming: false,
+      nodeInfo: []
+    })
+    
+    // 添加助手消息
+    const assistantMsgIndex = messages.value.length
+    messages.value.push({
+      role: 'assistant',
+      content: '',
+      isLoading: research.status !== 'completed',
+      isStreaming: false,
+      statusText: research.status === 'completed' ? '研究已完成' : '研究进行中...',
+      nodeInfo: research.progress_logs || []
+    })
+    
+    // 如果已完成，加载报告
+    if (research.status === 'completed') {
+      messages.value[assistantMsgIndex].isLoading = false
+      messages.value[assistantMsgIndex].isStreaming = true
+      await streamReport(assistantMsgIndex)
+    } else {
+      // 否则继续轮询
+      await pollProgress(assistantMsgIndex)
+    }
+  } catch (error) {
+    console.error('加载研究失败:', error)
+    ElMessage.error('加载研究失败')
+  }
+}
+</script>
+
+<style scoped>
+/* 隐藏全局滚动条 */
+html, body {
+  overflow: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+  display: none !important;
+}
+
+.chat-layout {
+  display: flex;
+  height: 100vh;
+  background-color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* 左侧导航栏 */
+.sidebar {
+  width: 260px;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  transition: all 0.3s;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  color: #111827;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.logo-icon {
+  font-size: 24px;
+  color: #667eea;
+}
+
+.new-research-btn {
+  margin-bottom: 24px;
+}
+
+.history-label {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #4b5563;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.history-item:hover {
+  background: #e5e7eb;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.model-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+}
+
+/* 右侧主聊天区 */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.chat-container {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 20px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.message-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.welcome-card {
+  text-align: center;
+  max-width: 600px;
+}
+
+.welcome-card h2 {
+  font-size: 28px;
+  color: #111827;
+  margin-bottom: 12px;
+}
+
+.welcome-card p {
+  color: #6b7280;
+  margin-bottom: 32px;
+}
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.suggestion-tag {
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 20px;
+}
+
+.message-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.message-row.user .avatar {
+  background: #667eea;
+  color: white;
+}
+
+.message-bubble {
+  max-width: 85%;
+  width: fit-content;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: #1f2937;
+  line-height: 1.6;
+  font-size: 15px;
+  overflow: hidden;
+  word-wrap: break-word;
+}
+
+.message-row.user .message-bubble {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* 流式输出状态指示器 */
+.streaming-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  animation: thinking 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots .dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-dots .dot:nth-child(2) { animation-delay: -0.16s; }
+.thinking-dots .dot:nth-child(3) { animation-delay: 0s; }
+
+.status-text {
+  color: #909399;
+  font-size: 14px;
+  font-style: italic;
+}
+
+@keyframes thinking {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 流式输出时的光标 */
+.cursor-blink {
+  display: inline-block;
+  color: #667eea;
+  font-weight: bold;
+  font-size: 16px;
+  line-height: 1;
+  animation: blink 1s infinite;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.message-text {
+  word-wrap: break-word;
+  line-height: 1.6;
+  display: inline;
+}
+
+.message-content {
+  display: inline;
+}
+
+/* 节点执行信息区域 */
+.node-info-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.node-info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.node-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.node-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.node-info {
+  background-color: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+.node-success {
+  background-color: #f6ffed;
+  border-left: 3px solid #52c41a;
+}
+
+.node-warning {
+  background-color: #fffbe6;
+  border-left: 3px solid #faad14;
+}
+
+.node-error {
+  background-color: #fff2f0;
+  border-left: 3px solid #ff4d4f;
+}
+
+.node-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.node-message {
+  flex: 1;
+  color: #4b5563;
+}
+
+/* 输入区域 */
+.input-area {
+  padding: 24px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.input-box {
+  position: relative;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 12px;
+  background: #f9fafb;
+  transition: all 0.2s;
+}
+
+.input-box:focus-within {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  background: #fff;
+}
+
+.send-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+}
+
+.input-tip {
+  text-align: right;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 8px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .chat-container { max-width: 100%; }
+}
+</style>
