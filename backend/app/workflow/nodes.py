@@ -488,13 +488,14 @@ async def execute_tasks_parallel_node(state: ResearchState) -> Dict[str, Any]:
     }
 
 async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
-    """节点4：报告生成
+    """节点4：报告生成（流式版本）
     
     功能：
     - 汇总所有任务的分析结果
-    - 生成结构化的研究报告
+    - 流式生成结构化的研究报告
+    - 实时推送生成进度
     """
-    logger.info(f"📝 节点4：开始生成研究报告")
+    logger.info(f"📝 节点4：开始流式生成研究报告")
     
     # 初始化进度日志
     progress_logs = state.get('progress_logs', [])
@@ -502,7 +503,7 @@ async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
     try:
         progress_logs.append({
             'type': 'info',
-            'message': '📝 开始汇总研究数据，生成最终报告...',
+            'message': '📝 开始汇总研究数据，流式生成最终报告...',
             'timestamp': datetime.now().isoformat()
         })
         
@@ -515,30 +516,37 @@ async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
             'timestamp': datetime.now().isoformat()
         })
         
-        # 生成报告（记录开始时间）
+        # 流式生成报告（不阻断，直接累积）
         start_time = datetime.now()
         progress_logs.append({
             'type': 'info',
-            'message': ' 正在生成报告，请稍候...',
+            'message': '⚡ 开始流式生成报告...',
             'timestamp': start_time.isoformat()
         })
         
-        report = await llm_service.generate_report(
+        # 使用流式生成，直接累积（不做中间统计）
+        report_chunks = []
+        
+        async for chunk in llm_service.generate_report_stream(
             state['query'],
             state['outline'],
             analyses
-        )
+        ):
+            report_chunks.append(chunk)
+        
+        # 合并所有chunk
+        report = ''.join(report_chunks)
         
         end_time = datetime.now()
         elapsed = (end_time - start_time).total_seconds()
         
         progress_logs.append({
             'type': 'success',
-            'message': f'✅ 研究报告生成完成，共 {len(report)} 字（耗时{elapsed:.1f}秒）',
+            'message': f'✅ 研究报告流式生成完成，共 {len(report)} 字（耗时{elapsed:.1f}秒）',
             'timestamp': end_time.isoformat()
         })
         
-        logger.info(f"✅ 报告生成完成，字数: {len(report)}")
+        logger.info(f"✅ 报告流式生成完成，字数: {len(report)}")
         
         return {
             'report': report,
@@ -546,7 +554,7 @@ async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
             'status': 'completed'
         }
     except Exception as e:
-        logger.error(f"❌ 报告生成失败: {e}")
+        logger.error(f"❌ 报告流式生成失败: {e}")
         progress_logs.append({
             'type': 'error',
             'message': f'❌ 报告生成失败: {str(e)}',

@@ -15,6 +15,7 @@ from app.services.llm_service import llm_service
 from app.config import settings
 from app.utils.logger import get_logger
 import json
+import asyncio
 
 logger = get_logger("ResearchAPI")
 
@@ -151,19 +152,24 @@ async def stream_report(research_id: str):
                 yield f"data: {json.dumps({'content': report, 'done': True}, ensure_ascii=False)}\n\n"
                 return
             
-            # 流式输出报告
-            query = research.get('query', '')
-            outline = research.get('outline', [])
-            
-            # 从tasks中提取分析结果
-            analyses = []
-            for task in research.get('tasks', []):
-                if task.get('analysis'):
-                    analyses.append(task['analysis'])
-            
-            # 流式生成
-            async for chunk in llm_service.generate_report_stream(query, outline, analyses):
-                yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+            # 方案B：直接使用工作流已生成的报告（分块发送）
+            report = research.get('report', '')
+                        
+            if not report:
+                # 如果没有预生成的报告，才调用流式生成
+                query = research.get('query', '')
+                outline = research.get('outline', [])
+                analyses = [task.get('analysis', '') for task in research.get('tasks', []) if task.get('analysis')]
+                            
+                async for chunk in llm_service.generate_report_stream(query, outline, analyses):
+                    yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+            else:
+                # 将完整报告分块发送（模拟流式效果）
+                chunk_size = 100  # 每块100字
+                for i in range(0, len(report), chunk_size):
+                    chunk = report[i:i+chunk_size]
+                    yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.02)  # 更快的速度
             
             # 结束标记
             yield f"data: {json.dumps({'content': '', 'done': True}, ensure_ascii=False)}\n\n"
