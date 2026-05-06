@@ -266,6 +266,7 @@ const startNewChat = () => {
   messages.value = []
   currentChatIndex.value = -1
   userInput.value = ''
+  currentChatDBId = null  // 重置数据库ID
 }
 
 // 加载历史对话
@@ -275,6 +276,9 @@ const loadChat = (index) => {
   
   // 恢复消息
   messages.value = chat.messages || []
+  
+  // 设置当前数据库ID（用于后续更新）
+  currentChatDBId = chat.id || null
   
   // 如果研究未完成，继续轮询
   const lastMsg = messages.value[messages.value.length - 1]
@@ -287,6 +291,9 @@ const sendMessage = async () => {
   if (!userInput.value.trim() || isLoading.value) return
 
   const userMessage = userInput.value.trim()
+  
+  // 新对话，重置数据库ID
+  currentChatDBId = null
   
   // 添加用户消息
   messages.value.push({ 
@@ -342,6 +349,9 @@ const sendMessage = async () => {
   }
 }
 
+// 当前研究的数据库ID（用于更新）
+let currentChatDBId = null
+
 // 保存到历史记录
 const saveToHistory = async (query, researchId) => {
   console.log(' 准备保存历史记录:', { query, researchId })
@@ -357,21 +367,37 @@ const saveToHistory = async (query, researchId) => {
   }
   
   try {
-    // 保存到数据库
-    const id = await saveChatToDB(chatData)
-    console.log('✅ 历史记录已保存，ID:', id)
+    let id
     
-    // 更新本地状态
-    chatHistory.value.unshift({
-      id,
-      ...chatData
-    })
-    
-    // 限制历史记录数量（最多50条）
-    if (chatHistory.value.length > 50) {
-      const toRemove = chatHistory.value.pop()
-      if (toRemove.id) {
-        await deleteChat(toRemove.id)
+    if (currentChatDBId) {
+      // 更新已有记录
+      console.log(' 更新已有历史记录，ID:', currentChatDBId)
+      await updateChat(currentChatDBId, chatData)
+      id = currentChatDBId
+      
+      // 更新本地状态
+      const index = chatHistory.value.findIndex(c => c.id === currentChatDBId)
+      if (index !== -1) {
+        chatHistory.value[index] = { id, ...chatData }
+      }
+    } else {
+      // 创建新记录
+      id = await saveChatToDB(chatData)
+      console.log('✅ 创建新历史记录，ID:', id)
+      currentChatDBId = id
+      
+      // 更新本地状态
+      chatHistory.value.unshift({
+        id,
+        ...chatData
+      })
+      
+      // 限制历史记录数量（最多50条）
+      if (chatHistory.value.length > 50) {
+        const toRemove = chatHistory.value.pop()
+        if (toRemove.id) {
+          await deleteChat(toRemove.id)
+        }
       }
     }
   } catch (error) {
@@ -423,6 +449,14 @@ const pollProgress = async (assistantMsgIndex, researchId) => {
       }
     } catch (error) {
       console.error('获取进度失败:', error)
+      
+      // 如果是404（研究不存在），停止轮询
+      if (error.message && error.message.includes('研究不存在')) {
+        console.warn('研究已被删除或服务器重启，停止轮询')
+        clearInterval(pollInterval)
+        messages.value[assistantMsgIndex].isLoading = false
+        messages.value[assistantMsgIndex].statusText = '研究数据已丢失（服务器重启）'
+      }
     }
   }, 1000)  // 改为1秒轮询一次，提供更流畅的流式体验
 }
@@ -440,10 +474,14 @@ const streamReport = async (assistantMsgIndex, researchId) => {
         }
       },
       // onDone
-      () => {
+      async () => {
         messages.value[assistantMsgIndex].isStreaming = false
         messages.value[assistantMsgIndex].statusText = '研究完成！'
         ElMessage.success('研究报告生成完成！')
+        
+        // 流式完成后，再次保存（包含完整报告）
+        await saveToHistory(messages.value[0]?.content || '', researchId)
+        
         resolve()
       },
       // onError
