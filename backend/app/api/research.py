@@ -152,24 +152,14 @@ async def stream_report(research_id: str):
                 yield f"data: {json.dumps({'content': report, 'done': True}, ensure_ascii=False)}\n\n"
                 return
             
-            # 方案B：直接使用工作流已生成的报告（分块发送）
-            report = research.get('report', '')
-                        
-            if not report:
-                # 如果没有预生成的报告，才调用流式生成
-                query = research.get('query', '')
-                outline = research.get('outline', [])
-                analyses = [task.get('analysis', '') for task in research.get('tasks', []) if task.get('analysis')]
-                            
-                async for chunk in llm_service.generate_report_stream(query, outline, analyses):
-                    yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
-            else:
-                # 将完整报告分块发送（模拟流式效果）
-                chunk_size = 100  # 每块100字
-                for i in range(0, len(report), chunk_size):
-                    chunk = report[i:i+chunk_size]
-                    yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
-                    await asyncio.sleep(0.02)  # 更快的速度
+            # 直接使用LLM流式生成（不使用已生成的报告）
+            query = research.get('query', '')
+            outline = research.get('outline', [])
+            analyses = [task.get('analysis', '') for task in research.get('tasks', []) if task.get('analysis')]
+            
+            # 流式生成报告（实时调用LLM）
+            async for chunk in llm_service.generate_report_stream(query, outline, analyses):
+                yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
             
             # 结束标记
             yield f"data: {json.dumps({'content': '', 'done': True}, ensure_ascii=False)}\n\n"

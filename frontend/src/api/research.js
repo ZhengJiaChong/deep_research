@@ -54,7 +54,7 @@ export default {
   
   // 流式获取报告
   streamReport(researchId, onChunk, onDone, onError) {
-    const url = `/api/research/${researchId}/stream`
+    const url = `/api/research/${researchId}/stream`  // EventSource需要完整路径
     const eventSource = new EventSource(url)
     
     eventSource.onmessage = (event) => {
