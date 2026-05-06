@@ -157,6 +157,7 @@ import { ref, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useResearchStore } from '../stores/research'
 import { ElMessage } from 'element-plus'
+import { marked } from 'marked'
 import { 
   Promotion, Search, Plus, User, Service, Document, 
   ChatDotRound, ArrowDown, ArrowRight, Close
@@ -182,12 +183,17 @@ onMounted(async () => {
 // 格式化消息
 const formatMessage = (content) => {
   if (!content) return ''
-  return content
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
+  
+  // 使用marked库渲染Markdown
+  try {
+    return marked.parse(content, {
+      breaks: true,  // 支持换行
+      gfm: true,     // GitHub风格Markdown
+    })
+  } catch (error) {
+    console.error('Markdown渲染失败:', error)
+    return content
+  }
 }
 
 // 获取节点图标
@@ -340,10 +346,13 @@ const sendMessage = async () => {
 const saveToHistory = async (query, researchId) => {
   console.log(' 准备保存历史记录:', { query, researchId })
   
+  // 使用JSON序列化/反序列化清理不可克隆的对象
+  const cleanMessages = JSON.parse(JSON.stringify(messages.value))
+  
   const chatData = {
     query,
     researchId,
-    messages: [...messages.value],
+    messages: cleanMessages,
     timestamp: new Date().toISOString()
   }
   

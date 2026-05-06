@@ -515,17 +515,27 @@ async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
             'timestamp': datetime.now().isoformat()
         })
         
-        # 生成报告
+        # 生成报告（记录开始时间）
+        start_time = datetime.now()
+        progress_logs.append({
+            'type': 'info',
+            'message': ' 正在生成报告，请稍候...',
+            'timestamp': start_time.isoformat()
+        })
+        
         report = await llm_service.generate_report(
             state['query'],
             state['outline'],
             analyses
         )
         
+        end_time = datetime.now()
+        elapsed = (end_time - start_time).total_seconds()
+        
         progress_logs.append({
             'type': 'success',
-            'message': f'✅ 研究报告生成完成，共 {len(report)} 字',
-            'timestamp': datetime.now().isoformat()
+            'message': f'✅ 研究报告生成完成，共 {len(report)} 字（耗时{elapsed:.1f}秒）',
+            'timestamp': end_time.isoformat()
         })
         
         logger.info(f"✅ 报告生成完成，字数: {len(report)}")
