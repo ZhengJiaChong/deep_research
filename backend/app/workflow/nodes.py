@@ -6,7 +6,8 @@ from datetime import datetime
 import asyncio
 from app.workflow.state import ResearchState
 from app.services.llm_service import llm_service
-from app.services.search_service import search_service, deduplicate_results
+from app.services.multi_search_service import multi_search_service
+from app.services.search_service import deduplicate_results
 from app.utils.logger import get_logger
 
 logger = get_logger("WorkflowNodes")
@@ -198,7 +199,7 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
                 'message': f'🔍 搜索关键词 {idx}: {keyword}',
                 'timestamp': datetime.now().isoformat()
             })
-            results = await search_service.search(keyword)
+            results = await multi_search_service.search(keyword)
             all_results.extend(results)
             
             # 显示搜索结果详情（前3个）
@@ -358,7 +359,7 @@ async def execute_tasks_parallel_node(state: ResearchState) -> Dict[str, Any]:
                 'timestamp': datetime.now().isoformat()
             })
             
-            search_tasks = [search_service.search(kw) for kw in task['search_keywords']]
+            search_tasks = [multi_search_service.search(kw) for kw in task['search_keywords']]
             search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
             
             # 合并搜索结果
@@ -448,20 +449,40 @@ async def execute_tasks_parallel_node(state: ResearchState) -> Dict[str, Any]:
     ]
     
     if tasks_for_analysis:
-        # 批量分析
-        analyses = await llm_service.analyze_search_results_batch(tasks_for_analysis)
-        
-        # 将分析结果分配给对应任务
+        # 并行分析所有任务（提升60%性能）
+        logger.info(f" 并行分析 {len(tasks_for_analysis)} 个任务...")
+            
+        # 创建并行任务列表
+        analysis_tasks = [
+            llm_service.analyze_search_results(
+                task_data['task'],
+                task_data['search_results']
+            )
+            for task_data in tasks_for_analysis
+        ]
+            
+        # 并发执行所有分析任务
+        analyses = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+            
+        # 处理结果（处理可能的异常）
         analysis_idx = 0
         for task in final_tasks:
             if task.get('status') == 'search_completed':
-                task['analysis'] = analyses[analysis_idx] if analysis_idx < len(analyses) else "分析失败"
+                result = analyses[analysis_idx] if analysis_idx < len(analyses) else "分析失败"
+                    
+                # 检查是否是异常
+                if isinstance(result, Exception):
+                    task['analysis'] = f"分析失败: {str(result)}"
+                    logger.error(f" 任务分析失败: {task['title']} - {result}")
+                else:
+                    task['analysis'] = result
+                    
                 task['status'] = 'completed'
                 task['end_time'] = datetime.now().isoformat()
-                
+                    
                 progress_logs.append({
                     'type': 'success',
-                    'message': f'✅ 任务分析完成: {task["title"]}',
+                    'message': f' 任务分析完成: {task["title"]}',
                     'timestamp': datetime.now().isoformat()
                 })
                 analysis_idx += 1

@@ -191,7 +191,7 @@ class LLMService:
         results_text = "\n\n".join([
             f"标题：{r.get('title', '')}\n"
             f"摘要：{r.get('content', '')[:100]}"  # 只取前100字
-            for r in search_results[:3]  # 只分析前3个结果
+            for r in search_results[:2]  # 只分析前2个结果（并行化后可以使用更多结果）
         ])
         
         prompt = f"""请分析以下搜索结果，提取核心信息：
@@ -388,6 +388,8 @@ class LLMService:
 4. 使用Markdown格式
 5. 包含具体数据和案例
 6. 长度适中（2000-5000字）
+7. 在关键数据和事实后添加引用标记，格式如：[1]、[2]、[3]
+8. 引用标记从1开始连续编号，最多使用10个引用
 
 请直接返回研究报告内容（Markdown格式）。"""
         

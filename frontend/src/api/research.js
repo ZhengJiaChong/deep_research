@@ -53,7 +53,7 @@ export default {
   },
   
   // 流式获取报告
-  streamReport(researchId, onChunk, onDone, onError) {
+  streamReport(researchId, onChunk, onDone, onError, onSearchResults) {
     const url = `/api/research/${researchId}/stream`  // EventSource需要完整路径
     const eventSource = new EventSource(url)
     
@@ -64,6 +64,12 @@ export default {
         if (data.error) {
           onError(data.error)
           eventSource.close()
+          return
+        }
+        
+        // 处理searchResults数据（引用链接）
+        if (data.searchResults && onSearchResults) {
+          onSearchResults(data.searchResults)
           return
         }
         

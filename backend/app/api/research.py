@@ -157,6 +157,16 @@ async def stream_report(research_id: str):
             outline = research.get('outline', [])
             analyses = [task.get('analysis', '') for task in research.get('tasks', []) if task.get('analysis')]
             
+            # 收集所有任务的搜索结果（用于引用链接）
+            search_results = []
+            for task in research.get('tasks', []):
+                if task.get('search_results'):
+                    search_results.extend(task['search_results'])
+            
+            # 发送searchResults数据（用于前端引用链接）
+            if search_results:
+                yield f"data: {json.dumps({'searchResults': search_results}, ensure_ascii=False)}\n\n"
+            
             # 流式生成报告（实时调用LLM）
             async for chunk in llm_service.generate_report_stream(query, outline, analyses):
                 yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"

@@ -77,7 +77,7 @@
               
               <!-- 有内容时显示文字 -->
               <div v-else-if="msg.content" class="message-content">
-                <div class="message-text" v-html="formatMessage(msg.content)"></div>
+                <div class="message-text" v-html="formatMessage(msg.content, msg.searchResults || [])"></div>
                 <span v-if="msg.isStreaming" class="cursor-blink">▍</span>
               </div>
               
@@ -135,12 +135,15 @@
 <script setup>
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { 
+import {
   Search, Plus, User, Service, Promotion, Cpu, Operation
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api/research'
 import { useResearchStore } from '@/stores/research'
+import { createCitationRenderer } from '@/utils/citationRenderer'
+import '@/assets/citation.css'
+import { marked } from 'marked'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,17 +163,57 @@ const quickActions = ref([
   { label: '技术趋势', icon: 'DataAnalysis', query: '量子计算技术发展现状' },
 ])
 
-// 格式化消息（支持Markdown）
-const formatMessage = (content) => {
+// 格式化消息（支持Markdown和引用链接）
+const formatMessage = (content, searchResults = []) => {
   if (!content) return ''
-  let formatted = content
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-    .replace(/\n/g, '<br>')
-  return formatted
+  
+  try {
+    let html
+    
+    // 使用marked渲染Markdown
+    if (searchResults.length > 0) {
+      const renderer = createCitationRenderer(searchResults)
+      // 使用marked.use()设置renderer（marked v11的方式）
+      marked.use({ renderer })
+      html = marked.parse(content)
+    } else {
+      // 如果没有searchResults，使用默认Markdown渲染
+      html = content
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+        .replace(/\n/g, '<br>')
+    }
+    
+    // 后处理：替换HTML中的所有引用标记 [1]、[2]、[3]
+    if (searchResults.length > 0) {
+      html = html.replace(/\[(\d+)\]/g, (match, num) => {
+        const index = parseInt(num) - 1
+        const result = searchResults[index]
+        
+        if (result) {
+          return `<span class="citation-link" 
+                        data-url="${result.url}" 
+                        data-title="${result.title}"
+                        data-content="${(result.content || '').substring(0, 200)}"
+                        onclick="window.open('${result.url}', '_blank')"
+                        onmouseenter="showCitationTooltip(event, this)"
+                        onmouseleave="hideCitationTooltip()">
+                    <span class="citation-number">${num}</span>
+                    <span class="citation-icon">🔗</span>
+                  </span>`
+        }
+        return match // 如果没有对应的搜索结果，返回原样
+      })
+    }
+    
+    return html
+  } catch (e) {
+    console.error('格式化消息失败:', e)
+    return content.replace(/\n/g, '<br>')
+  }
 }
 
 // 获取节点图标
@@ -222,6 +265,7 @@ const sendMessage = async () => {
   messages.value.push({ 
     role: 'assistant', 
     content: '',
+    searchResults: [],  // 添加搜索结果数组
     isLoading: true,
     isStreaming: false,
     statusText: '开始分析您的问题...',
@@ -253,7 +297,10 @@ const sendMessage = async () => {
 
 // 轮询进度
 const pollProgress = async (assistantMsgIndex) => {
-  const pollInterval = setInterval(async () => {
+  // 清理之前的轮询
+  cleanupTasks()
+  
+  currentPollInterval = setInterval(async () => {
     try {
       const progress = await api.getProgress(researchId.value)
       
@@ -272,7 +319,8 @@ const pollProgress = async (assistantMsgIndex) => {
       
       // 如果研究完成，停止轮询并获取报告
       if (progress.status === 'completed') {
-        clearInterval(pollInterval)
+        clearInterval(currentPollInterval)
+        currentPollInterval = null
         messages.value[assistantMsgIndex].isLoading = false
         messages.value[assistantMsgIndex].isStreaming = true
         messages.value[assistantMsgIndex].statusText = '正在生成研究报告...'
@@ -289,7 +337,10 @@ const pollProgress = async (assistantMsgIndex) => {
 // 流式获取报告
 const streamReport = async (assistantMsgIndex) => {
   return new Promise((resolve, reject) => {
-    const eventSource = api.streamReport(
+    // 清理之前的SSE连接
+    cleanupTasks()
+    
+    currentEventSource = api.streamReport(
       researchId.value,
       // onChunk
       (content) => {
@@ -302,6 +353,7 @@ const streamReport = async (assistantMsgIndex) => {
       () => {
         messages.value[assistantMsgIndex].isStreaming = false
         messages.value[assistantMsgIndex].statusText = '研究完成！'
+        currentEventSource = null  // 清理引用
         ElMessage.success('研究报告生成完成！')
         resolve()
       },
@@ -310,14 +362,45 @@ const streamReport = async (assistantMsgIndex) => {
         console.error('流式输出失败:', error)
         messages.value[assistantMsgIndex].isStreaming = false
         messages.value[assistantMsgIndex].statusText = '报告生成完成（流式失败）'
+        currentEventSource = null  // 清理引用
         reject(error)
+      },
+      // onSearchResults - 接收搜索结果数据
+      (searchResults) => {
+        messages.value[assistantMsgIndex].searchResults = searchResults
+        console.log('✅ 收到searchResults:', searchResults.length, '个')
       }
     )
   })
 }
 
+// 存储当前的异步任务引用
+let currentPollInterval = null
+let currentEventSource = null
+
+// 清理所有异步任务
+const cleanupTasks = () => {
+  // 清理轮询定时器
+  if (currentPollInterval) {
+    clearInterval(currentPollInterval)
+    currentPollInterval = null
+  }
+  
+  // 清理SSE连接
+  if (currentEventSource) {
+    currentEventSource.close()
+    currentEventSource = null
+  }
+}
+
 // 监听路由变化，加载已有研究
-watch(() => route.params.id, (newId) => {
+watch(() => route.params.id, (newId, oldId) => {
+  // 路由变化时，清理旧任务并清空消息
+  if (oldId && newId !== oldId) {
+    cleanupTasks()  // 清理异步任务
+    messages.value = []
+  }
+  
   if (newId) {
     researchId.value = newId
     loadExistingResearch()

@@ -1,0 +1,135 @@
+/**
+ * 引用链接样式
+ */
+
+/* 引用链接样式 */
+.citation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  margin: 0 2px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.citation-link:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.citation-number {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+}
+
+.citation-icon {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+/* 悬浮提示框 */
+.citation-tooltip {
+  position: fixed;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  max-width: 400px;
+  min-width: 250px;
+  z-index: 10000;
+  animation: tooltipFadeIn 0.2s ease-in;
+  pointer-events: none;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.tooltip-icon {
+  font-size: 16px;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  flex: 1;
+  line-height: 1.4;
+}
+
+.tooltip-content {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  max-height: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tooltip-footer {
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.tooltip-url {
+  font-size: 12px;
+  color: #999;
+  word-break: break-all;
+  display: block;
+}
+
+/* 普通外部链接 */
+.external-link {
+  color: #667eea;
+  text-decoration: none;
+  border-bottom: 1px dashed #667eea;
+  transition: all 0.2s;
+}
+
+.external-link:hover {
+  color: #764ba2;
+  border-bottom-color: #764ba2;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .citation-tooltip {
+    max-width: 90vw;
+    min-width: 200px;
+    left: 5vw !important;
+    right: 5vw;
+  }
+  
+  .citation-link {
+    padding: 1px 4px;
+    font-size: 11px;
+  }
+}
