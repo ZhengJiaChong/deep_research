@@ -6,8 +6,7 @@ from datetime import datetime
 import asyncio
 from app.workflow.state import ResearchState
 from app.services.llm_service import llm_service
-from app.services.multi_search_service import multi_search_service
-from app.services.search_service import deduplicate_results
+from app.services.search_service import search_service, deduplicate_results
 from app.utils.logger import get_logger
 
 logger = get_logger("WorkflowNodes")
@@ -199,7 +198,7 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
                 'message': f'🔍 搜索关键词 {idx}: {keyword}',
                 'timestamp': datetime.now().isoformat()
             })
-            results = await multi_search_service.search(keyword)
+            results = await search_service.search(keyword)
             all_results.extend(results)
             
             # 显示搜索结果详情（前3个）
@@ -359,7 +358,7 @@ async def execute_tasks_parallel_node(state: ResearchState) -> Dict[str, Any]:
                 'timestamp': datetime.now().isoformat()
             })
             
-            search_tasks = [multi_search_service.search(kw) for kw in task['search_keywords']]
+            search_tasks = [search_service.search(kw) for kw in task['search_keywords']]
             search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
             
             # 合并搜索结果

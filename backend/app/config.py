@@ -31,11 +31,8 @@ class Settings(BaseSettings):
     STREAM_OUTPUT: bool = os.getenv("STREAM_OUTPUT", "true").lower() == "true"
     
     # --- Tavily 配置 ---
-    TAVILY_API_KEY: str = os.getenv("JWZT_TAVILY_API_KEY", "")
+    TAVILY_API_KEY: str = os.getenv("JWZT_TAVILY_API_KEY")
     TAVILY_MAX_RESULTS: int = 5
-    
-    # --- Brave 配置 ---
-    BRAVE_API_KEY: str = os.getenv("BRAVE_API_KEY", "")
     
     # --- 研究配置 ---
     MAX_TASKS_PER_RESEARCH: int = 10
@@ -49,13 +46,17 @@ class Settings(BaseSettings):
 
     def __init__(self):
         super().__init__()
-        # 验证必需的API密钥（只验证OpenRouter）
+        # 验证必需的API密钥
         if not self.OPENROUTER_API_KEY:
             raise ValueError(
                 "未找到 JWZT_OPENROUTER_API_KEY 环境变量。"
                 "请在 backend/.env 文件中配置或设置系统环境变量。"
             )
-        # Tavily现在是可选的，会自动降级到其他搜索引擎
+        if not self.TAVILY_API_KEY:
+            raise ValueError(
+                "未找到 JWZT_TAVILY_API_KEY 环境变量。"
+                "请在 backend/.env 文件中配置或设置系统环境变量。"
+            )
 
 # 全局配置实例
 settings = Settings()

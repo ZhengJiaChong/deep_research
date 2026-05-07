@@ -14,8 +14,12 @@ class SearchService:
     
     def __init__(self):
         """初始化Tavily客户端"""
-        self.client = TavilyClient(api_key=settings.TAVILY_API_KEY)
-        logger.info("✅ Tavily搜索服务已初始化")
+        # 显式传递API Key，避免Tavily SDK读取其他环境变量
+        api_key = settings.TAVILY_API_KEY
+        if not api_key:
+            raise ValueError("TAVILY_API_KEY未配置")
+        self.client = TavilyClient(api_key=api_key)
+        logger.info(f"✅ Tavily搜索服务已初始化 (Key: {api_key[:15]}...)")
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def search(self, query: str, max_results: int = None) -> List[Dict[str, Any]]:

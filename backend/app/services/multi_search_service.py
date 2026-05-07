@@ -127,26 +127,11 @@ class MultiSearchService:
         # 按优先级初始化搜索引擎
         self.engines = []
         
-        # 1. Brave（优先，质量高）
-        try:
-            from app.services.brave_search import brave_search
-            if brave_search.available:
-                self.engines.append(('brave', brave_search))
-                logger.info("✅ 搜索引擎: Brave")
-        except Exception as e:
-            logger.warning(f"️ Brave不可用: {e}")
-        
-        # 2. DuckDuckGo（免费保底）
-        ddg = DuckDuckGoSearcher()
-        if ddg.available:
-            self.engines.append(('duckduckgo', ddg))
-            logger.info("✅ 搜索引擎: DuckDuckGo")
-        
-        # 3. Tavily（最后，可能限额）
+        # 1. Tavily（唯一搜索引擎）
         try:
             from app.services.search_service import SearchService
-            tavily = SearchService()
-            self.engines.append(('tavily', tavily))
+            self.tavily = SearchService()
+            self.engines.append(('tavily', self.tavily))
             logger.info("✅ 搜索引擎: Tavily")
         except Exception as e:
             logger.warning(f"⚠️ Tavily不可用: {e}")
