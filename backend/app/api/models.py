@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 class StartResearchRequest(BaseModel):
     """开始研究请求"""
     query: str = Field(..., description="研究问题", min_length=5, max_length=2000)
+    selected_skills: List[str] = Field(default_factory=list, description="选中的Skills列表")
 
 # 响应模型
 class StartResearchResponse(BaseModel):

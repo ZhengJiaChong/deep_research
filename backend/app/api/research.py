@@ -32,10 +32,13 @@ async def start_research(request: StartResearchRequest):
         研究ID和状态
     """
     try:
-        logger.info(f"📥 收到研究请求: {request.query[:50]}...")
+        logger.info(f" 收到研究请求: {request.query[:50]}...")
         
-        # 开始研究
-        research_id = await research_service.start_research(request.query)
+        # 开始研究（传递Skills列表）
+        research_id = await research_service.start_research(
+            request.query,
+            request.selected_skills  # 传递选中的Skills
+        )
         
         return StartResearchResponse(
             research_id=research_id,
@@ -43,7 +46,7 @@ async def start_research(request: StartResearchRequest):
             message="研究已开始，正在分析问题..."
         )
     except Exception as e:
-        logger.error(f"❌ 启动研究失败: {e}")
+        logger.error(f" 启动研究失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{research_id}/outline", response_model=OutlineResponse)
@@ -163,8 +166,9 @@ async def stream_report(research_id: str):
                 if task.get('search_results'):
                     search_results.extend(task['search_results'])
             
-            logger.info(f"📊 收集到 {len(search_results)} 个搜索结果")
-                        
+            logger.info(f" 收集到 {len(search_results)} 个搜索结果")
+            logger.info(f"📊 tasks数量: {len(research.get('tasks', []))}")
+            
             # 获取引用数据
             citations = research.get('citations', {})
             logger.info(f"📊 citations数量: {len(citations)}")

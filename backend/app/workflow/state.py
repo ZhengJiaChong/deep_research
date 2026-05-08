@@ -41,6 +41,8 @@ class ResearchState(TypedDict, total=False):
     report: str
     progress_logs: List[Dict[str, Any]]  # 进度日志
     citations: Dict[int, Dict]  # 引用数据 {id: citation_data}
+    selected_skills: List[str]  # 选中的Skills列表
+    skill_call_events: List[Dict[str, Any]]  # Skill调用事件
     status: str
     error: Optional[str]
     created_at: str

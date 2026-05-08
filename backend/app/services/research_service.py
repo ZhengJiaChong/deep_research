@@ -23,17 +23,18 @@ class ResearchService:
         unique_id = str(uuid.uuid4())[:8]
         return f"research_{timestamp}_{unique_id}"
     
-    async def start_research(self, query: str) -> str:
+    async def start_research(self, query: str, selected_skills: list[str] = None) -> str:
         """开始研究
         
         Args:
             query: 用户输入的研究问题
+            selected_skills: 用户选中的Skills列表
         
         Returns:
             research_id: 研究ID
         """
         research_id = self._generate_research_id()
-        logger.info(f"🚀 开始研究: {research_id}")
+        logger.info(f"🚀 开始研究: {research_id}, Skills: {selected_skills}")
         
         # 初始化研究状态
         initial_state = {
@@ -45,6 +46,9 @@ class ResearchService:
             'current_task_index': 0,
             'report': '',
             'progress_logs': [],  # 进度日志
+            'citations': {},  # 引用数据
+            'selected_skills': selected_skills or [],  # 选中的Skills
+            'skill_call_events': [],  # Skill调用事件
             'status': 'starting',
             'error': None,
             'created_at': datetime.now().isoformat(),

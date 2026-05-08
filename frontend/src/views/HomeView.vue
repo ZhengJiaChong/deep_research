@@ -297,7 +297,13 @@ const getNodeIcon = (type) => {
 const scrollToBottom = async () => {
   await nextTick()
   if (messageContainer.value) {
-    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+    // 检查用户是否正在查看历史消息（不在底部）
+    const isAtBottom = messageContainer.value.scrollHeight - messageContainer.value.scrollTop - messageContainer.value.clientHeight < 50
+    
+    // 只有用户在底部时才自动滚动
+    if (isAtBottom) {
+      messageContainer.value.scrollTop = messageContainer.value.scrollHeight
+    }
   }
 }
 
@@ -311,9 +317,6 @@ const toggleSkill = (skillId) => {
   }
 }
 
-// 标记已执行的Skills（避免重复执行）
-const executedSkills = ref(new Set())
-
 // 加载可用Skills列表
 const loadAvailableSkills = async () => {
   try {
@@ -326,78 +329,6 @@ const loadAvailableSkills = async () => {
     console.error('加载Skills列表失败:', error)
   }
 }
-
-// 在研究过程中自动执行Skills
-const executeSkillsDuringResearch = async (researchId, progressData) => {
-  if (selectedSkills.value.length === 0) return
-  
-  // 检查是否已经有大纲数据
-  if (progressData.outline && progressData.outline.length > 0 && 
-      selectedSkills.value.includes('outline_optimizer') && 
-      !executedSkills.value.has('outline_optimizer')) {
-    
-    executedSkills.value.add('outline_optimizer')
-    console.log('🔧 执行大纲优化Skill...')
-    
-    try {
-      const result = await executeOutlineOptimizer({
-        outline: progressData.outline,
-        query: progressData.query || ''
-      })
-      displaySkillResults([{ status: 'fulfilled', value: result }])
-    } catch (error) {
-      console.error('大纲优化Skill执行失败:', error)
-    }
-  }
-  
-  // 检查是否有搜索结果数据
-  const hasSearchResults = progressData.tasks && progressData.tasks.some(
-    task => task.search_results && task.search_results.length > 0
-  )
-  
-  if (hasSearchResults && !executedSkills.value.has('search_data_skills')) {
-    executedSkills.value.add('search_data_skills')
-    
-    // 收集所有搜索结果和引用
-    const allResults = []
-    const allCitations = []
-    
-    for (const task of (progressData.tasks || [])) {
-      if (task.search_results) {
-        allResults.push(...task.search_results)
-        allCitations.push(...task.search_results.map(r => ({
-          url: r.url,
-          title: r.title,
-          content: r.content
-        })))
-      }
-    }
-    
-    // 并行执行引用验证和搜索评估
-    const skillPromises = []
-    
-    if (selectedSkills.value.includes('citation_validator') && allCitations.length > 0) {
-      console.log('🔧 执行引用链接验证Skill...')
-      skillPromises.push(executeCitationValidatorDirect(allCitations))
-    }
-    
-    if (selectedSkills.value.includes('search_evaluator') && allResults.length > 0) {
-      console.log('🔧 执行搜索结果质量评估Skill...')
-      skillPromises.push(executeSearchEvaluatorDirect(allResults, progressData.query || ''))
-    }
-    
-    if (skillPromises.length > 0) {
-      try {
-        const results = await Promise.allSettled(skillPromises)
-        displaySkillResults(results)
-      } catch (error) {
-        console.error('Skills执行失败:', error)
-      }
-    }
-  }
-}
-
-// 直接执行引用验证（不需要完整research对象）
 const executeCitationValidatorDirect = async (citations) => {
   try {
     const response = await fetch('/api/skills/validate-citations', {
@@ -629,7 +560,6 @@ const startNewChat = () => {
   currentChatIndex.value = -1
   userInput.value = ''
   currentChatDBId = null  // 重置数据库ID
-  executedSkills.value.clear()  // 重置已执行的Skills标记
 }
 
 // 加载历史对话
@@ -687,8 +617,8 @@ const sendMessage = async () => {
   await scrollToBottom()
 
   try {
-    // 开始研究
-    const response = await researchStore.startResearch(userMessage)
+    // 开始研究（传递选中的Skills）
+    const response = await researchStore.startResearch(userMessage, selectedSkills.value)
     const researchId = response.research_id
     
     // 更新助手消息
@@ -696,11 +626,6 @@ const sendMessage = async () => {
     
     // 轮询进度
     await pollProgress(assistantMsgIndex, researchId)
-    
-    // 研究完成后执行Skills
-    if (selectedSkills.value.length > 0) {
-      await executeSkills(researchId)
-    }
     
     // 保存到历史记录
     await saveToHistory(userMessage, researchId)
@@ -791,9 +716,6 @@ const pollProgress = async (assistantMsgIndex, researchId) => {
         }
       }
       
-      // 在研究过程中自动执行Skills
-      await executeSkillsDuringResearch(researchId, progress)
-      
       await scrollToBottom()
       
       // 研究完成
@@ -851,8 +773,10 @@ const streamReport = async (assistantMsgIndex, researchId) => {
         messages.value[assistantMsgIndex].statusText = '研究完成！'
         ElMessage.success('研究报告生成完成！')
         
-        // 流式完成后，再次保存（包含完整报告）
-        await saveToHistory(messages.value[0]?.content || '', researchId)
+        // 异步保存历史记录（不阻塞用户界面）
+        saveToHistory(messages.value[0]?.content || '', researchId).catch(err => {
+          console.error('后台保存历史记录失败:', err)
+        })
         
         resolve()
       },

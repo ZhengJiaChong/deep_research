@@ -8,9 +8,43 @@ from app.workflow.state import ResearchState
 from app.services.llm_service import llm_service
 from app.services.search_service import search_service, deduplicate_results
 from app.services.citation_service import citation_service
+from app.services.skill_call_parser import skill_call_parser
 from app.utils.logger import get_logger
 
 logger = get_logger("WorkflowNodes")
+
+async def _parse_and_execute_skill_calls(analysis: str, research_id: str) -> str:
+    """解析分析结果中的Skill调用标记并执行
+    
+    Args:
+        analysis: LLM返回的分析结果
+        research_id: 研究ID
+    
+    Returns:
+        str: 处理后的分析结果（替换了Skill调用标记）
+    """
+    try:
+        # 解析Skill调用标记
+        skill_calls = skill_call_parser.parse_skill_calls(analysis)
+        
+        if not skill_calls:
+            return analysis
+        
+        logger.info(f"检测到{len(skill_calls)}个Skill调用标记")
+        
+        # 执行Skill调用
+        results = await skill_call_parser.execute_skill_calls(skill_calls, research_id)
+        
+        # 替换标记为结果
+        processed_analysis = skill_call_parser.replace_skill_calls_with_results(
+            analysis, skill_calls, results
+        )
+        
+        return processed_analysis
+    
+    except Exception as e:
+        logger.error(f"Skill调用解析失败: {e}")
+        return analysis  # 失败时返回原始分析
 
 async def analyze_query_node(state: ResearchState) -> Dict[str, Any]:
     """节点1：语义分析
@@ -69,6 +103,7 @@ async def generate_outline_node(state: ResearchState) -> Dict[str, Any]:
     - 基于分析结果生成研究大纲
     - 生成5-8个研究任务
     - 为每个任务分配ID和顺序
+    - 注入Skills描述到Prompt（如果选中了Skills）
     """
     logger.info(f" 节点2：开始生成研究大纲")
     
@@ -82,9 +117,26 @@ async def generate_outline_node(state: ResearchState) -> Dict[str, Any]:
             'timestamp': datetime.now().isoformat()
         })
         
+        # 获取选中的Skills
+        selected_skills = state.get('selected_skills', [])
+        skills_context = ""
+        
+        if selected_skills:
+            from app.skills import skills_loader
+            skills_desc = []
+            for skill_id in selected_skills:
+                skill_info = skills_loader.get_skill_info(skill_id)
+                if skill_info:
+                    skills_desc.append(f"- {skill_id}: {skill_info.get('description', '')}")
+            
+            if skills_desc:
+                skills_context = "\n\n可用Skills（你可以在适当时机调用）：\n" + "\n".join(skills_desc)
+                skills_context += "\n\n调用格式：[SKILL_CALL: skill_id]参数JSON[/SKILL_CALL]"
+        
         outline = await llm_service.generate_outline(
             state['query'],
-            state['analysis']
+            state['analysis'],
+            skills_context  # 注入Skills描述
         )
         
         progress_logs.append({
@@ -130,7 +182,7 @@ async def generate_outline_node(state: ResearchState) -> Dict[str, Any]:
         logger.error(f"❌ 大纲生成失败: {e}")
         progress_logs.append({
             'type': 'error',
-            'message': f'❌ 大纲生成失败: {str(e)}',
+            'message': f' 大纲生成失败: {str(e)}',
             'timestamp': datetime.now().isoformat()
         })
         return {
@@ -256,6 +308,10 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
                 task,
                 task['search_results']
             )
+            
+            # 解析并执行Skill调用标记
+            analysis = await _parse_and_execute_skill_calls(analysis, research_id)
+            
             task['analysis'] = analysis
             progress_logs.append({
                 'type': 'success',

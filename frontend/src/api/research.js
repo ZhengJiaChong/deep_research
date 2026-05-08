@@ -33,10 +33,14 @@ api.interceptors.response.use(
 // API方法
 export default {
   // 开始研究
-  startResearch(query) {
+  startResearch(query, selectedSkills = []) {
     console.log('🚀 前端发送研究请求:', query)
+    console.log('🔧 选中Skills:', selectedSkills)
     console.log('🚀 请求URL: /api/research/start')
-    return api.post('/research/start', { query })
+    return api.post('/research/start', { 
+      query,
+      selected_skills: selectedSkills  // 传递Skills列表
+    })
       .then(response => {
         console.log('✅ 后端响应:', response)
         return response

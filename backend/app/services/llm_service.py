@@ -81,12 +81,13 @@ class LLMService:
             return {"raw_analysis": content, "error": str(e)}
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def generate_outline(self, query: str, analysis: Dict) -> List[Dict[str, Any]]:
+    async def generate_outline(self, query: str, analysis: Dict, skills_context: str = "") -> List[Dict[str, Any]]:
         """生成研究大纲（优化版 - 精简提示词）
         
         Args:
             query: 原始问题
             analysis: 语义分析结果
+            skills_context: Skills上下文（可选）
         
         Returns:
             大纲任务列表
@@ -94,10 +95,10 @@ class LLMService:
         analysis_str = json.dumps(analysis, ensure_ascii=False)
         
         prompt = f"""研究问题：{query}
-分析：{analysis_str}
+分析：{analysis_str}{skills_context}
 
 生成5个研究任务，JSON数组：
-[{{"id":"task_001","title":"标题","description":"描述","order":1}}]"""
+[{ {"id":"task_001","title":"标题","description":"描述","order":1}}]"""
         
         logger.info(f" 开始生成研究大纲")
         

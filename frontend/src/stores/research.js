@@ -14,17 +14,18 @@ export const useResearchStore = defineStore('research', {
   },
   
   actions: {
-    async startResearch(query) {
+    async startResearch(query, selectedSkills = []) {
       this.loading = true
       this.error = null
       
       try {
-        const response = await api.startResearch(query)
+        const response = await api.startResearch(query, selectedSkills)
         
         this.currentResearch = {
           id: response.research_id,
           query,
-          status: response.status
+          status: response.status,
+          selectedSkills
         }
         
         return response
