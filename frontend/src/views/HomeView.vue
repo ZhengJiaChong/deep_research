@@ -127,7 +127,6 @@
                       :key="idx"
                       :id="`citation-${idx + 1}`"
                       class="reference-item"
-                      @click="openReference(result.url)"
                     >
                       <div class="reference-header">
                         <span class="reference-number">{{ idx + 1 }}</span>
@@ -140,8 +139,6 @@
                           </svg>
                         </a>
                       </div>
-                      <div class="reference-source">{{ result.source || extractDomain(result.url) }}</div>
-                      <p class="reference-snippet">{{ (result.content || '').substring(0, 200) }}...</p>
                     </div>
                   </div>
                 </div>
@@ -566,14 +563,7 @@ const streamReport = async (assistantMsgIndex, researchId) => {
       },
       // onSearchResults - 接收搜索结果数据
       (searchResults) => {
-        console.log('📥 收到SSE searchResults事件')
-        console.log('📥 searchResults类型:', typeof searchResults)
-        console.log('📥 searchResults长度:', searchResults?.length)
-        if (searchResults && searchResults.length > 0) {
-          console.log('📥 第一条数据:', searchResults[0])
-        }
         messages.value[assistantMsgIndex].searchResults = searchResults || []
-        console.log('✅ 已存储searchResults:', messages.value[assistantMsgIndex].searchResults.length, '个')
       }
     )
   })

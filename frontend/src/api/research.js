@@ -66,21 +66,14 @@ export default {
   // 流式获取报告
   streamReport(researchId, onChunk, onDone, onError, onSearchResults) {
     const url = `/api/research/${researchId}/stream`  // EventSource需要完整路径
-    console.log('🔗 SSE连接URL:', url)
     const eventSource = new EventSource(url)
     
-    eventSource.onopen = () => {
-      console.log('✅ SSE连接已建立')
-    }
-    
     eventSource.onmessage = (event) => {
-      console.log('📨 收到SSE原始数据:', event.data.substring(0, 100))
       try {
         const data = JSON.parse(event.data)
-        console.log('📦 解析后的数据keys:', Object.keys(data))
         
         if (data.error) {
-          console.error('❌ SSE错误:', data.error)
+          console.error('SSE错误:', data.error)
           onError(data.error)
           eventSource.close()
           return
@@ -88,16 +81,8 @@ export default {
         
         // 处理searchResults数据（引用链接）
         if (data.searchResults) {
-          console.log('📊 检测到searchResults字段')
-          console.log('📊 onSearchResults回调是否存在:', typeof onSearchResults)
-          console.log('📊 searchResults长度:', data.searchResults.length)
-          
           if (onSearchResults) {
-            console.log('📊 调用onSearchResults回调')
             onSearchResults(data.searchResults)
-            console.log('✅ onSearchResults回调执行完成')
-          } else {
-            console.warn('⚠️ onSearchResults回调未定义')
           }
           return
         }
@@ -105,13 +90,11 @@ export default {
         onChunk(data.content)
         
         if (data.done) {
-          console.log('✅ SSE流结束')
           eventSource.close()
           onDone()
         }
       } catch (e) {
-        console.error('❌ 解析SSE数据失败:', e)
-        console.error('原始数据:', event.data)
+        console.error('解析SSE数据失败:', e)
       }
     }
     

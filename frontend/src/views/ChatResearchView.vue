@@ -88,7 +88,6 @@
                       :key="idx"
                       :id="`citation-${idx + 1}`"
                       class="reference-item"
-                      @click="openReference(result.url)"
                     >
                       <div class="reference-header">
                         <span class="reference-number">{{ idx + 1 }}</span>
@@ -101,8 +100,6 @@
                           </svg>
                         </a>
                       </div>
-                      <div class="reference-source">{{ result.source || extractDomain(result.url) }}</div>
-                      <p class="reference-snippet">{{ (result.content || '').substring(0, 200) }}...</p>
                     </div>
                   </div>
                 </div>
