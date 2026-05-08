@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.research import router as research_router
 from app.api.mcp_router import router as mcp_router
+from app.api.mcp_enhanced_router import router as mcp_enhanced_router
 from app.utils.logger import get_logger
 
 logger = get_logger("Main")
@@ -38,6 +39,7 @@ app.add_middleware(
 # 注册业务路由
 app.include_router(research_router, prefix="/api", tags=["Research"])
 app.include_router(mcp_router, tags=["MCP"])
+app.include_router(mcp_enhanced_router, tags=["MCP-Enhanced"])
 
 @app.get("/api/health")
 async def health_check():
