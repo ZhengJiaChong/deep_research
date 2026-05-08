@@ -105,5 +105,27 @@ export default {
     }
     
     return eventSource
+  },
+  
+  // Skills相关API
+  
+  // 获取可用Skills列表
+  getSkillsList() {
+    return api.get('/skills/list')
+  },
+  
+  // 大纲优化
+  optimizeOutline(outline, query) {
+    return api.post('/skills/optimize-outline', { outline, query })
+  },
+  
+  // 引用验证
+  validateCitations(citations) {
+    return api.post('/skills/validate-citations', { citations })
+  },
+  
+  // 搜索评估
+  evaluateSearchResults(results, query) {
+    return api.post('/skills/evaluate-search-results', { results, query })
   }
 }

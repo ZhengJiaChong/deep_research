@@ -131,6 +131,22 @@
 
         <!-- 底部输入框 -->
         <div class="input-area">
+          <!-- Skills选择菜单 -->
+          <div v-if="availableSkills.length > 0" class="skills-menu">
+            <div 
+              v-for="skill in availableSkills" 
+              :key="skill.id"
+              class="skill-item"
+              :class="{ 'skill-active': selectedSkills.includes(skill.id) }"
+              @click="toggleSkill(skill.id)"
+              :style="{ borderColor: skill.color }"
+            >
+              <span class="skill-icon">{{ skill.icon }}</span>
+              <span class="skill-name">{{ skill.name }}</span>
+              <el-icon v-if="selectedSkills.includes(skill.id)" class="skill-check"><Check /></el-icon>
+            </div>
+          </div>
+          
           <div class="input-box">
             <el-input
               v-model="userInput"
@@ -151,7 +167,7 @@
               class="send-btn"
             />
           </div>
-          <div class="input-tip">按 Ctrl + Enter 发送</div>
+          <div class="input-tip">按 Ctrl + Enter 发送 · 点击Skills启用辅助功能</div>
         </div>
       </div>
     </main>
@@ -162,7 +178,7 @@
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Search, Plus, User, Service, Promotion, Cpu, Operation
+  Search, Plus, User, Service, Promotion, Cpu, Operation, Check
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api/research'
@@ -181,6 +197,11 @@ const isLoading = ref(false)
 const messageContainer = ref(null)
 const currentModel = ref('openrouter/free')
 const researchId = ref(route.params.id)
+
+// Skills相关状态
+const availableSkills = ref([])
+const selectedSkills = ref([])
+const executedSkills = ref(new Set())  // 标记已执行的Skills
 
 const quickActions = ref([
   { label: '环境检测', icon: 'Monitor', query: '环境检测未来发展如何' },
@@ -264,12 +285,212 @@ const scrollToBottom = async () => {
 }
 
 const startNewResearch = () => {
+  executedSkills.value.clear()  // 重置已执行的Skills标记
   router.push({ name: 'home' })
 }
 
 const useQuickAction = (action) => {
   userInput.value = action.query
   sendMessage()
+}
+
+// Skills相关函数
+const loadSkills = async () => {
+  try {
+    const response = await api.getSkillsList()
+    if (response.success) {
+      availableSkills.value = response.data
+      console.log('✅ 加载Skills列表:', availableSkills.value)
+    }
+  } catch (error) {
+    console.error('❌ 加载Skills失败:', error)
+  }
+}
+
+const toggleSkill = (skillId) => {
+  const index = selectedSkills.value.indexOf(skillId)
+  if (index > -1) {
+    selectedSkills.value.splice(index, 1)
+    ElMessage.info('已禁用该Skill')
+  } else {
+    selectedSkills.value.push(skillId)
+    ElMessage.success('已启用该Skill')
+  }
+  console.log('🔧 当前选中的Skills:', selectedSkills.value)
+}
+
+// 在研究过程中自动执行Skills
+const executeSkillsDuringResearch = async (researchId, progressData) => {
+  if (selectedSkills.value.length === 0) return
+  
+  // 检查是否已经有大纲数据
+  if (progressData.outline && progressData.outline.length > 0 && 
+      selectedSkills.value.includes('outline_optimizer') && 
+      !executedSkills.value.has('outline_optimizer')) {
+    
+    executedSkills.value.add('outline_optimizer')
+    console.log('🔧 执行大纲优化Skill...')
+    
+    try {
+      const result = await executeOutlineOptimizer({
+        outline: progressData.outline,
+        query: progressData.query || ''
+      })
+      displaySkillResults([{ status: 'fulfilled', value: result }])
+    } catch (error) {
+      console.error('大纲优化Skill执行失败:', error)
+    }
+  }
+  
+  // 检查是否有搜索结果数据
+  const hasSearchResults = progressData.tasks && progressData.tasks.some(
+    task => task.search_results && task.search_results.length > 0
+  )
+  
+  if (hasSearchResults && !executedSkills.value.has('search_data_skills')) {
+    executedSkills.value.add('search_data_skills')
+    
+    // 收集所有搜索结果和引用
+    const allResults = []
+    const allCitations = []
+    
+    for (const task of (progressData.tasks || [])) {
+      if (task.search_results) {
+        allResults.push(...task.search_results)
+        allCitations.push(...task.search_results.map(r => ({
+          url: r.url,
+          title: r.title,
+          content: r.content
+        })))
+      }
+    }
+    
+    // 并行执行引用验证和搜索评估
+    const skillPromises = []
+    
+    if (selectedSkills.value.includes('citation_validator') && allCitations.length > 0) {
+      console.log('🔧 执行引用链接验证Skill...')
+      skillPromises.push(executeCitationValidatorDirect(allCitations))
+    }
+    
+    if (selectedSkills.value.includes('search_evaluator') && allResults.length > 0) {
+      console.log('🔧 执行搜索结果质量评估Skill...')
+      skillPromises.push(executeSearchEvaluatorDirect(allResults, progressData.query || ''))
+    }
+    
+    if (skillPromises.length > 0) {
+      try {
+        const results = await Promise.allSettled(skillPromises)
+        displaySkillResults(results)
+      } catch (error) {
+        console.error('Skills执行失败:', error)
+      }
+    }
+  }
+}
+
+// 直接执行引用验证（不需要完整research对象）
+const executeCitationValidatorDirect = async (citations) => {
+  try {
+    const response = await fetch('/api/skills/validate-citations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ citations })
+    })
+    
+    const data = await response.json()
+    return { skill: '引用链接验证Skill', success: true, data }
+  } catch (error) {
+    return { skill: '引用链接验证Skill', success: false, error: error.message }
+  }
+}
+
+// 直接执行搜索评估（不需要完整research对象）
+const executeSearchEvaluatorDirect = async (results, query) => {
+  try {
+    const response = await fetch('/api/skills/evaluate-search-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results, query })
+    })
+    
+    const data = await response.json()
+    return { skill: '搜索结果质量评估Skill', success: true, data }
+  } catch (error) {
+    return { skill: '搜索结果质量评估Skill', success: false, error: error.message }
+  }
+}
+
+// 执行大纲优化
+const executeOutlineOptimizer = async (data) => {
+  try {
+    const response = await fetch('/api/skills/optimize-outline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    
+    const result = await response.json()
+    return { skill: '大纲优化Skill', success: true, data: result }
+  } catch (error) {
+    return { skill: '大纲优化Skill', success: false, error: error.message }
+  }
+}
+
+// 显示Skill结果
+const displaySkillResults = (results) => {
+  let skillMessage = '## 🔧 Skills分析结果\n\n'
+  
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      const skillResult = result.value
+      skillMessage += `### ${skillResult.skill}\n\n`
+      
+      if (skillResult.success) {
+        const data = skillResult.data
+        
+        // 根据Skill类型显示不同内容
+        if (skillResult.skill === '大纲优化Skill') {
+          skillMessage += `- **综合评分**: ${data.overall_score}/100\n`
+          skillMessage += `- **建议数量**: ${data.suggestions?.length || 0}条\n`
+          skillMessage += `- **缺失主题**: ${data.missing_topics?.length || 0}个\n\n`
+          
+          if (data.suggestions && data.suggestions.length > 0) {
+            skillMessage += '**优化建议**:\n'
+            data.suggestions.slice(0, 3).forEach((suggestion, i) => {
+              skillMessage += `${i + 1}. ${suggestion}\n`
+            })
+            skillMessage += '\n'
+          }
+        } else if (skillResult.skill === '引用链接验证Skill') {
+          skillMessage += `- **有效引用**: ${data.valid_count}个\n`
+          skillMessage += `- **无效引用**: ${data.invalid_count}个\n`
+          skillMessage += `- **整体评分**: ${data.overall_score}%\n\n`
+        } else if (skillResult.skill === '搜索结果质量评估Skill') {
+          skillMessage += `- **平均评分**: ${data.average_score}/100\n`
+          skillMessage += `- **结果总数**: ${data.total_results}个\n`
+          skillMessage += `- **高质量结果**: ${data.high_quality_count}个\n\n`
+        }
+      } else {
+        skillMessage += `❌ 执行失败: ${skillResult.error}\n\n`
+      }
+    } else {
+      skillMessage += `❌ 执行异常: ${result.reason}\n\n`
+    }
+  })
+  
+  // 添加Skill结果到消息列表
+  messages.value.push({
+    role: 'assistant',
+    content: skillMessage,
+    isLoading: false,
+    isStreaming: false,
+    nodeInfo: [],
+    showProcess: true,
+    searchResults: []
+  })
+  
+  scrollToBottom()
 }
 
 const sendMessage = async () => {
@@ -343,6 +564,9 @@ const pollProgress = async (assistantMsgIndex) => {
           messages.value[assistantMsgIndex].statusText = lastLog.message
         }
       }
+      
+      // 在研究过程中自动执行Skills
+      await executeSkillsDuringResearch(researchId.value, progress)
       
       await scrollToBottom()
       
@@ -525,6 +749,11 @@ if (typeof window !== 'undefined') {
     }
   }
 }
+
+// 组件挂载时加载Skills
+onMounted(() => {
+  loadSkills()
+})
 </script>
 
 <style scoped>
@@ -887,6 +1116,55 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   padding: 24px;
   background: #ffffff;
   border-top: 1px solid #e5e7eb;
+}
+
+/* Skills选择菜单 */
+.skills-menu {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 2px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  color: #6b7280;
+  user-select: none;
+}
+
+.skill-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.skill-item.skill-active {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  color: #667eea;
+  font-weight: 600;
+  border-width: 2px;
+}
+
+.skill-icon {
+  font-size: 16px;
+}
+
+.skill-name {
+  white-space: nowrap;
+}
+
+.skill-check {
+  font-size: 14px;
+  color: #667eea;
 }
 
 .input-box {
