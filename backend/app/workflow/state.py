@@ -40,6 +40,7 @@ class ResearchState(TypedDict, total=False):
     current_task_index: int
     report: str
     progress_logs: List[Dict[str, Any]]  # 进度日志
+    citations: Dict[int, Dict]  # 引用数据 {id: citation_data}
     status: str
     error: Optional[str]
     created_at: str

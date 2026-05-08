@@ -7,6 +7,7 @@ import asyncio
 from app.workflow.state import ResearchState
 from app.services.llm_service import llm_service
 from app.services.search_service import search_service, deduplicate_results
+from app.services.citation_service import citation_service
 from app.utils.logger import get_logger
 
 logger = get_logger("WorkflowNodes")
@@ -20,6 +21,9 @@ async def analyze_query_node(state: ResearchState) -> Dict[str, Any]:
     - 提取关键信息
     """
     logger.info(f" 节点1：开始语义分析")
+    
+    # 重置引用数据（每次新研究开始时）
+    citation_service.reset()
     
     # 初始化进度日志
     progress_logs = state.get('progress_logs', [])
@@ -192,6 +196,8 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
         # 2. 执行搜索
         logger.info(f"  步骤2：执行搜索")
         all_results = []
+        citation_mappings = []  # 存储引用映射
+        
         for idx, keyword in enumerate(task['search_keywords'], 1):
             progress_logs.append({
                 'type': 'info',
@@ -199,6 +205,15 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
                 'timestamp': datetime.now().isoformat()
             })
             results = await search_service.search(keyword)
+            
+            # 将搜索结果添加为引用
+            for result in results[:3]:  # 每个关键词最多3个引用
+                citation_id = citation_service.add_search_result_as_citation(result)
+                citation_mappings.append({
+                    'keyword': keyword,
+                    'citation_id': citation_id
+                })
+            
             all_results.extend(results)
             
             # 显示搜索结果详情（前3个）
@@ -220,6 +235,9 @@ async def execute_task_node(state: ResearchState) -> Dict[str, Any]:
         # 去重
         unique_results = deduplicate_results(all_results)
         task['search_results'] = unique_results[:5]  # 保留5个最佳结果
+        logger.info(f"✅ 任务 {task_id} 保存了 {len(task['search_results'])} 个搜索结果")
+        if task['search_results']:
+            logger.info(f"📋 第一个结果: {task['search_results'][0]['title'][:50]}")
         progress_logs.append({
             'type': 'info',
             'message': f'去重后保留 {len(unique_results[:5])} 个高质量结果',
@@ -370,6 +388,12 @@ async def execute_tasks_parallel_node(state: ResearchState) -> Dict[str, Any]:
             # 去重
             unique_results = deduplicate_results(all_results)
             task['search_results'] = unique_results[:5]
+            
+            # 将搜索结果添加为引用
+            for result in unique_results[:3]:  # 每个任务最多3个引用
+                citation_id = citation_service.add_search_result_as_citation(result)
+            
+            logger.info(f"✅ 任务 {index + 1} 添加了 {min(3, len(unique_results))} 个引用")
             
             # 展示搜索结果详情
             if unique_results:
@@ -544,8 +568,12 @@ async def generate_report_node(state: ResearchState) -> Dict[str, Any]:
         
         logger.info(f"数据准备完成")
         
+        # 获取所有引用数据
+        citations = citation_service.get_all_citations()
+        
         return {
             'progress_logs': progress_logs,
+            'citations': citations,  # 添加引用数据
             'status': 'completed'
             # 不返回report，由SSE接口生成
         }

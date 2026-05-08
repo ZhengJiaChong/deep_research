@@ -133,3 +133,141 @@
     font-size: 11px;
   }
 }
+
+/* 引用列表面板 */
+.references-section {
+  margin-top: 32px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.references-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.references-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 2px;
+}
+
+.references-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reference-item {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.reference-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateX(4px);
+}
+
+.reference-item.highlight {
+  border-color: #667eea;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.reference-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.reference-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.reference-link {
+  flex: 1;
+  color: #2d3748;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: color 0.2s;
+}
+
+.reference-link:hover {
+  color: #667eea;
+}
+
+.external-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.reference-link:hover .external-icon {
+  opacity: 1;
+}
+
+.reference-source {
+  margin-left: 36px;
+  font-size: 12px;
+  color: #718096;
+  margin-bottom: 8px;
+}
+
+.reference-snippet {
+  margin: 0 0 0 36px;
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .references-section {
+    padding: 16px;
+    margin-top: 24px;
+  }
+  
+  .reference-item {
+    padding: 12px;
+  }
+  
+  .reference-snippet {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+}

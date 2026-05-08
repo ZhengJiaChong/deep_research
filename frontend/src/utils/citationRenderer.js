@@ -22,7 +22,7 @@ export const createCitationRenderer = (searchResults = []) => {
                         data-url="${result.url}" 
                         data-title="${result.title}"
                         data-content="${(result.content || '').substring(0, 200)}"
-                        onclick="window.open('${result.url}', '_blank')"
+                        onclick="handleCitationClick(event, ${index})"
                         onmouseenter="showCitationTooltip(event, this)"
                         onmouseleave="hideCitationTooltip()">
                     <span class="citation-number">${num}</span>
@@ -106,6 +106,32 @@ window.hideCitationTooltip = () => {
   const tooltip = document.getElementById('citation-tooltip')
   if (tooltip) {
     tooltip.remove()
+  }
+}
+
+// 处理引用点击（滚动到对应引用）
+window.handleCitationClick = (event, index) => {
+  event.preventDefault()
+  const targetElement = document.getElementById(`citation-${index + 1}`)
+  
+  if (targetElement) {
+    // 移除之前的高亮
+    document.querySelectorAll('.reference-item.highlight').forEach(el => {
+      el.classList.remove('highlight')
+    })
+    
+    // 滚动到目标
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    
+    // 添加高亮效果
+    setTimeout(() => {
+      targetElement.classList.add('highlight')
+    }, 300)
+    
+    // 2秒后移除高亮
+    setTimeout(() => {
+      targetElement.classList.remove('highlight')
+    }, 2300)
   }
 }
 

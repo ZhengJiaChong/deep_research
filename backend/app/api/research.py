@@ -163,12 +163,25 @@ async def stream_report(research_id: str):
                 if task.get('search_results'):
                     search_results.extend(task['search_results'])
             
+            logger.info(f"📊 收集到 {len(search_results)} 个搜索结果")
+                        
+            # 获取引用数据
+            citations = research.get('citations', {})
+            logger.info(f"📊 citations数量: {len(citations)}")
+                        
             # 发送searchResults数据（用于前端引用链接）
             if search_results:
+                logger.info(f"📤 发送searchResults: {len(search_results)} 个")
                 yield f"data: {json.dumps({'searchResults': search_results}, ensure_ascii=False)}\n\n"
-            
-            # 流式生成报告（实时调用LLM）
-            async for chunk in llm_service.generate_report_stream(query, outline, analyses):
+            else:
+                logger.warning("⚠️ search_results为空，无法发送引用数据")
+                        
+            # 发送citations数据（引用列表面板）
+            if citations:
+                yield f"data: {json.dumps({'citations': citations}, ensure_ascii=False)}\n\n"
+                        
+            # 流式生成报告（实时调用LLM，传入citations）
+            async for chunk in llm_service.generate_report_stream(query, outline, analyses, citations):
                 yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
             
             # 结束标记

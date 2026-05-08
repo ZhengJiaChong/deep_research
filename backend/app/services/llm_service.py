@@ -82,7 +82,7 @@ class LLMService:
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def generate_outline(self, query: str, analysis: Dict) -> List[Dict[str, Any]]:
-        """生成研究大纲
+        """生成研究大纲（优化版 - 精简提示词）
         
         Args:
             query: 原始问题
@@ -93,26 +93,11 @@ class LLMService:
         """
         analysis_str = json.dumps(analysis, ensure_ascii=False)
         
-        prompt = f"""基于以下研究问题和语义分析，生成一个详细的研究大纲：
+        prompt = f"""研究问题：{query}
+分析：{analysis_str}
 
-研究问题：{query}
-分析结果：{analysis_str}
-
-要求：
-1. 生成5-8个研究任务
-2. 每个任务应具体明确，可独立研究
-3. 任务之间应有逻辑关系
-4. 按照合理的顺序排列
-
-请返回JSON数组格式（仅返回JSON数组，不要其他内容）：
-[
-  {{
-    "id": "task_001",
-    "title": "任务标题",
-    "description": "任务详细描述",
-    "order": 1
-  }}
-]"""
+生成5个研究任务，JSON数组：
+[{{"id":"task_001","title":"标题","description":"描述","order":1}}]"""
         
         logger.info(f" 开始生成研究大纲")
         
@@ -140,7 +125,7 @@ class LLMService:
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def generate_search_keywords(self, task: Dict[str, Any]) -> List[str]:
-        """为研究任务生成搜索关键词
+        """为研究任务生成搜索关键词（优化版 - 精简提示词）
         
         Args:
             task: 研究任务信息
@@ -148,18 +133,7 @@ class LLMService:
         Returns:
             搜索关键词列表
         """
-        prompt = f"""为以下研究任务生成搜索关键词：
-
-任务：{task.get('title', '')}
-描述：{task.get('description', '')}
-
-要求：
-1. 生成3-5个搜索关键词
-2. 关键词应具体、可搜索
-3. 使用中文和英文关键词组合
-4. 关键词之间用换行分隔
-
-请直接返回关键词列表，每行一个关键词，不要其他内容。"""
+        prompt = f"""任务：{task.get('title', '')}\n描述：{task.get('description', '')}\n\n生成3个搜索关键词（中英混合），每行一个："""
         
         logger.info(f"🔑 为任务生成搜索关键词: {task.get('title', '')}")
         
@@ -349,13 +323,14 @@ class LLMService:
         logger.info(f"✅ 研究报告生成完成，字数: {len(content)}")
         return content
     
-    async def generate_report_stream(self, query: str, outline: List[Dict], analyses: List[str]) -> AsyncGenerator[str, None]:
-        """流式生成最终研究报告
+    async def generate_report_stream(self, query: str, outline: List[Dict], analyses: List[str], citations: Dict = None) -> AsyncGenerator[str, None]:
+        """流式生成最终研究报告（支持引用标记）
         
         Args:
             query: 原始问题
             outline: 研究大纲
             analyses: 各任务的分析结果
+            citations: 引用数据字典 {id: citation_data}
         
         Yields:
             流式输出的文本片段
@@ -371,6 +346,15 @@ class LLMService:
             for i, analysis in enumerate(analyses)
         ])
         
+        # 格式化引用列表（如果有）
+        citations_text = ""
+        if citations and len(citations) > 0:
+            citations_list = "\n".join([
+                f"[{cid}] {cite.get('title', '')}: {cite.get('url', '')}"
+                for cid, cite in sorted(citations.items())
+            ])
+            citations_text = f"\n\n可用参考资料：\n{citations_list}"
+        
         prompt = f"""请基于以下研究过程和结果，生成一份完整、专业的研究报告：
 
 原始问题：{query}
@@ -379,7 +363,7 @@ class LLMService:
 {outline_text}
 
 各任务分析结果：
-{analyses_text}
+{analyses_text}{citations_text}
 
 要求：
 1. 报告结构完整（引言、主体、结论）
@@ -390,6 +374,7 @@ class LLMService:
 6. 长度适中（2000-5000字）
 7. 在关键数据和事实后添加引用标记，格式如：[1]、[2]、[3]
 8. 引用标记从1开始连续编号，最多使用10个引用
+9. 优先使用上方提供的参考资料进行引用
 
 请直接返回研究报告内容（Markdown格式）。"""
         

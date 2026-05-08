@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>引用链接功能测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f7fa;
+            color: #2d3748;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            color: #1a202c;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 12px;
+        }
+
+        /* 引用标记样式 */
+        .citation-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin: 0 2px;
+            vertical-align: baseline;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .citation-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 9px;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .citation-icon {
+            font-size: 12px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .citation-link:hover .citation-number {
+            transform: translateY(-2px) scale(1.1);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.5);
+        }
+
+        .citation-link:hover .citation-icon {
+            opacity: 1;
+        }
+
+        .citation-link:active .citation-number {
+            transform: translateY(0) scale(0.95);
+        }
+
+        /* 正文内容 */
+        .content {
+            line-height: 1.8;
+            font-size: 16px;
+        }
+
+        .content p {
+            margin: 16px 0;
+            text-align: justify;
+        }
+
+        .content h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin: 24px 0 16px 0;
+            color: #2d3748;
+        }
+
+        .content strong {
+            color: #1a202c;
+            font-weight: 600;
+        }
+
+        /* 引用列表面板 */
+        .references-section {
+            margin-top: 40px;
+            padding: 24px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .references-title {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a202c;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .references-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .references-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .reference-item {
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .reference-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+            transform: translateX(4px);
+        }
+
+        .reference-item.highlight {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .reference-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .reference-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 6px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .reference-link {
+            flex: 1;
+            color: #2d3748;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+
+        .reference-link:hover {
+            color: #667eea;
+        }
+
+        .external-icon {
+            width: 14px;
+            height: 14px;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            flex-shrink: 0;
+        }
+
+        .reference-link:hover .external-icon {
+            opacity: 1;
+        }
+
+        .reference-source {
+            margin-left: 36px;
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .reference-snippet {
+            margin: 0 0 0 36px;
+            font-size: 13px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+        /* 悬浮提示框 */
+        .citation-tooltip {
+            position: fixed;
+            max-width: 400px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            border: 1px solid #e2e8f0;
+            z-index: 10000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .tooltip-icon {
+            font-size: 16px;
+        }
+
+        .tooltip-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1a202c;
+        }
+
+        .tooltip-content {
+            font-size: 13px;
+            color: #4a5568;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .tooltip-footer {
+            font-size: 11px;
+            color: #718096;
+            word-break: break-all;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                margin: 20px auto;
+                padding: 12px;
+            }
+
+            .container {
+                padding: 20px;
+            }
+
+            .references-section {
+                padding: 16px;
+                margin-top: 24px;
+            }
+
+            .reference-item {
+                padding: 12px;
+            }
+
+            .reference-snippet {
+                margin-left: 0;
+                margin-top: 8px;
+            }
+        }
+
+        /* 平滑滚动 */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI在医疗领域的应用研究报告</h1>
+        
+        <div class="content">
+            <p>人工智能在医疗领域的应用正在快速发展，特别是在医学影像分析方面取得了显著突破。根据最新研究显示，AI辅助诊断系统在肺部CT影像识别中的准确率已达到95%以上<span class="citation-link" data-url="https://example.com/medical-ai-2024" data-title="AI医学影像诊断技术综述" data-content="深度学习算法在医学影像分析中的应用显著提升，特别是在肺癌早期筛查中表现突出"><span class="citation-number">1</span><span class="citation-icon">🔗</span></span>。</p>
+            
+            <h2>临床诊断应用</h2>
+            <p>在临床诊断场景中，AI系统能够处理大量的患者数据，包括电子病历、实验室检查结果和影像学资料。通过分析这些数据，AI可以提供更准确的诊断建议，帮助医生做出更好的治疗决策<span class="citation-link" data-url="https://example.com/clinical-diagnosis" data-title="AI在临床诊断中的应用实践" data-content="机器学习模型能够从多维度医疗数据中提取关键特征，辅助医生进行疾病诊断"><span class="citation-number">2</span><span class="citation-icon">🔗</span></span>。</p>
+            
+            <p>特别值得注意的是，AI在罕见病诊断方面展现出巨大潜力。传统方法下，罕见病的平均诊断时间长达5-7年，而AI系统可以将这一时间缩短至数月<span class="citation-link" data-url="https://example.com/rare-disease-ai" data-title="AI加速罕见病诊断的研究进展" data-content="基于知识图谱的AI系统能够快速匹配症状与罕见病数据库，大幅提升诊断效率"><span class="citation-number">3</span><span class="citation-icon">🔗</span></span>。</p>
+            
+            <h2>药物研发创新</h2>
+            <p>AI技术在药物研发领域也发挥着重要作用。通过分子结构预测和药物相互作用分析，AI可以大幅缩短新药研发周期。据统计，使用AI辅助的药物研发项目，其成功率提高了30%，研发成本降低了40%<span class="citation-link" data-url="https://example.com/drug-discovery" data-title="AI驱动的药物研发新模式" data-content="深度学习模型能够预测化合物的药代动力学特性，优化候选药物筛选流程"><span class="citation-number">4</span><span class="citation-icon">🔗</span></span>。</p>
+            
+            <h2>面临的挑战</h2>
+            <p>尽管AI在医疗领域展现出巨大潜力，但仍面临诸多挑战。首先是数据隐私和安全问题，医疗数据的敏感性要求建立严格的数据保护机制<span class="citation-link" data-url="https://example.com/data-privacy" data-title="医疗AI中的数据隐私保护策略" data-content="联邦学习等隐私计算技术可以在不泄露原始数据的前提下训练AI模型"><span class="citation-number">5</span><span class="citation-icon">🔗</span></span>。其次是算法的可解释性问题，医生需要理解AI做出诊断的依据，而不仅仅是接受结果。</p>
+            
+            <p>此外，监管政策的完善也是一个重要议题。目前各国对医疗AI的审批标准尚不统一，需要建立更加科学、合理的评估体系<span class="citation-link" data-url="https://example.com/regulation-policy" data-title="全球医疗AI监管政策比较研究" data-content="FDA、CE等监管机构正在制定针对AI医疗设备的专门审批指南"><span class="citation-number">6</span><span class="citation-icon">🔗</span></span>。</p>
+            
+            <h2>未来展望</h2>
+            <p>展望未来，AI与医疗的融合将更加深入。个性化医疗、精准治疗和预防医学将成为主要发展方向。随着技术的不断进步和政策的逐步完善，AI有望成为医疗体系中不可或缺的重要组成部分，为人类健康事业做出更大贡献。</p>
+        </div>
+        
+        <div class="references-section">
+            <h3 class="references-title">参考资料</h3>
+            <div class="references-list">
+                <div id="citation-1" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">1</span>
+                        <a href="https://example.com/medical-ai-2024" target="_blank" rel="noopener" class="reference-link">
+                            AI医学影像诊断技术综述
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">医学影像技术期刊</div>
+                    <p class="reference-snippet">深度学习算法在医学影像分析中的应用显著提升，特别是在肺癌早期筛查中表现突出，准确率达到95%以上...</p>
+                </div>
+                
+                <div id="citation-2" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">2</span>
+                        <a href="https://example.com/clinical-diagnosis" target="_blank" rel="noopener" class="reference-link">
+                            AI在临床诊断中的应用实践
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">临床医学杂志</div>
+                    <p class="reference-snippet">机器学习模型能够从多维度医疗数据中提取关键特征，辅助医生进行疾病诊断，提升诊断准确率...</p>
+                </div>
+                
+                <div id="citation-3" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">3</span>
+                        <a href="https://example.com/rare-disease-ai" target="_blank" rel="noopener" class="reference-link">
+                            AI加速罕见病诊断的研究进展
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">罕见病研究</div>
+                    <p class="reference-snippet">基于知识图谱的AI系统能够快速匹配症状与罕见病数据库，将诊断时间从5-7年缩短至数月...</p>
+                </div>
+                
+                <div id="citation-4" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">4</span>
+                        <a href="https://example.com/drug-discovery" target="_blank" rel="noopener" class="reference-link">
+                            AI驱动的药物研发新模式
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">药物研发前沿</div>
+                    <p class="reference-snippet">深度学习模型能够预测化合物的药代动力学特性，优化候选药物筛选流程，成功率提高30%...</p>
+                </div>
+                
+                <div id="citation-5" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">5</span>
+                        <a href="https://example.com/data-privacy" target="_blank" rel="noopener" class="reference-link">
+                            医疗AI中的数据隐私保护策略
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">数据安全与隐私</div>
+                    <p class="reference-snippet">联邦学习等隐私计算技术可以在不泄露原始数据的前提下训练AI模型，保障患者隐私安全...</p>
+                </div>
+                
+                <div id="citation-6" class="reference-item">
+                    <div class="reference-header">
+                        <span class="reference-number">6</span>
+                        <a href="https://example.com/regulation-policy" target="_blank" rel="noopener" class="reference-link">
+                            全球医疗AI监管政策比较研究
+                            <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="reference-source">医疗政策研究</div>
+                    <p class="reference-snippet">FDA、CE等监管机构正在制定针对AI医疗设备的专门审批指南，推动行业规范化发展...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 点击引用标记跳转到对应引用
+        document.querySelectorAll('.citation-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const citationId = this.querySelector('.citation-number').textContent;
+                const targetElement = document.getElementById(`citation-${citationId}`);
+                
+                if (targetElement) {
+                    // 移除之前的高亮
+                    document.querySelectorAll('.reference-item.highlight').forEach(el => {
+                        el.classList.remove('highlight');
+                    });
+                    
+                    // 滚动到目标
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // 添加高亮效果
+                    setTimeout(() => {
+                        targetElement.classList.add('highlight');
+                    }, 300);
+                    
+                    // 2秒后移除高亮
+                    setTimeout(() => {
+                        targetElement.classList.remove('highlight');
+                    }, 2300);
+                }
+            });
+        });
+
+        // 显示引用悬浮提示
+        document.querySelectorAll('.citation-link').forEach(link => {
+            link.addEventListener('mouseenter', function(e) {
+                const url = this.dataset.url;
+                const title = this.dataset.title;
+                const content = this.dataset.content;
+                
+                // 移除已存在的tooltip
+                hideCitationTooltip();
+                
+                // 创建tooltip
+                const tooltip = document.createElement('div');
+                tooltip.id = 'citation-tooltip';
+                tooltip.className = 'citation-tooltip';
+                tooltip.innerHTML = `
+                    <div class="tooltip-header">
+                        <span class="tooltip-icon">🔗</span>
+                        <span class="tooltip-title">${title}</span>
+                    </div>
+                    <div class="tooltip-content">${content}...</div>
+                    <div class="tooltip-footer">
+                        <span class="tooltip-url">${url}</span>
+                    </div>
+                `;
+                
+                document.body.appendChild(tooltip);
+                
+                // 定位tooltip
+                const rect = this.getBoundingClientRect();
+                tooltip.style.top = (rect.bottom + 8) + 'px';
+                tooltip.style.left = rect.left + 'px';
+            });
+            
+            link.addEventListener('mouseleave', function() {
+                hideCitationTooltip();
+            });
+        });
+
+        // 隐藏引用悬浮提示
+        function hideCitationTooltip() {
+            const tooltip = document.getElementById('citation-tooltip');
+            if (tooltip) {
+                tooltip.remove();
+            }
+        }
+    </script>
+</body>
+</html>

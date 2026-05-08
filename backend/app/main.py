@@ -57,10 +57,16 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+    import logging
+    
+    # 配置根logger级别
+    logging.basicConfig(level=logging.INFO)
+    
     logger.info(f"正在启动 {settings.APP_NAME} v{settings.APP_VERSION}")
     uvicorn.run(
         "app.main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.DEBUG
+        reload=settings.DEBUG,
+        log_level="info"  # 显式设置日志级别
     )

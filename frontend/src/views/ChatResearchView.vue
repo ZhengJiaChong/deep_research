@@ -78,6 +78,35 @@
               <!-- 有内容时显示文字 -->
               <div v-else-if="msg.content" class="message-content">
                 <div class="message-text" v-html="formatMessage(msg.content, msg.searchResults || [])"></div>
+                
+                <!-- 引用列表面板 -->
+                <div v-if="msg.searchResults && msg.searchResults.length > 0" class="references-section">
+                  <h3 class="references-title">参考资料</h3>
+                  <div class="references-list">
+                    <div 
+                      v-for="(result, idx) in msg.searchResults" 
+                      :key="idx"
+                      :id="`citation-${idx + 1}`"
+                      class="reference-item"
+                      @click="openReference(result.url)"
+                    >
+                      <div class="reference-header">
+                        <span class="reference-number">{{ idx + 1 }}</span>
+                        <a :href="result.url" target="_blank" rel="noopener" class="reference-link" @click.stop>
+                          {{ result.title }}
+                          <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                          </svg>
+                        </a>
+                      </div>
+                      <div class="reference-source">{{ result.source || extractDomain(result.url) }}</div>
+                      <p class="reference-snippet">{{ (result.content || '').substring(0, 200) }}...</p>
+                    </div>
+                  </div>
+                </div>
+                
                 <span v-if="msg.isStreaming" class="cursor-blink">▍</span>
               </div>
               
@@ -171,21 +200,7 @@ const formatMessage = (content, searchResults = []) => {
     let html
     
     // 使用marked渲染Markdown
-    if (searchResults.length > 0) {
-      const renderer = createCitationRenderer(searchResults)
-      // 使用marked.use()设置renderer（marked v11的方式）
-      marked.use({ renderer })
-      html = marked.parse(content)
-    } else {
-      // 如果没有searchResults，使用默认Markdown渲染
-      html = content
-        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-        .replace(/\n/g, '<br>')
-    }
+    html = marked.parse(content)
     
     // 后处理：替换HTML中的所有引用标记 [1]、[2]、[3]
     if (searchResults.length > 0) {
@@ -198,7 +213,7 @@ const formatMessage = (content, searchResults = []) => {
                         data-url="${result.url}" 
                         data-title="${result.title}"
                         data-content="${(result.content || '').substring(0, 200)}"
-                        onclick="window.open('${result.url}', '_blank')"
+                        onclick="handleCitationClick(event, ${index})"
                         onmouseenter="showCitationTooltip(event, this)"
                         onmouseleave="hideCitationTooltip()">
                     <span class="citation-number">${num}</span>
@@ -225,6 +240,23 @@ const getNodeIcon = (type) => {
     'error': '❌'
   }
   return iconMap[type] || 'ℹ️'
+}
+
+// 打开引用链接
+const openReference = (url) => {
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+// 提取域名
+const extractDomain = (url) => {
+  try {
+    const urlObj = new URL(url)
+    return urlObj.hostname.replace('www.', '')
+  } catch {
+    return ''
+  }
 }
 
 const scrollToBottom = async () => {
@@ -367,8 +399,14 @@ const streamReport = async (assistantMsgIndex) => {
       },
       // onSearchResults - 接收搜索结果数据
       (searchResults) => {
-        messages.value[assistantMsgIndex].searchResults = searchResults
-        console.log('✅ 收到searchResults:', searchResults.length, '个')
+        console.log('📥 收到SSE searchResults事件')
+        console.log('📥 searchResults类型:', typeof searchResults)
+        console.log('📥 searchResults长度:', searchResults?.length)
+        if (searchResults && searchResults.length > 0) {
+          console.log('📥 第一条数据:', searchResults[0])
+        }
+        messages.value[assistantMsgIndex].searchResults = searchResults || []
+        console.log('✅ 已存储searchResults:', messages.value[assistantMsgIndex].searchResults.length, '个')
       }
     )
   })
@@ -445,6 +483,49 @@ const loadExistingResearch = async () => {
   } catch (error) {
     console.error('加载研究失败:', error)
     ElMessage.error('加载研究失败')
+  }
+}
+
+// 全局引用悬浮提示功能
+if (typeof window !== 'undefined') {
+  window.showCitationTooltip = (event, element) => {
+    const url = element.dataset.url
+    const title = element.dataset.title
+    const content = element.dataset.content
+    
+    // 移除已存在的tooltip
+    hideCitationTooltip()
+    
+    // 创建tooltip
+    const tooltip = document.createElement('div')
+    tooltip.id = 'citation-tooltip'
+    tooltip.className = 'citation-tooltip'
+    tooltip.innerHTML = `
+      <div class="tooltip-header">
+        <span class="tooltip-icon">🔗</span>
+        <span class="tooltip-title">${title}</span>
+      </div>
+      <div class="tooltip-content">${content}...</div>
+      <div class="tooltip-footer">
+        <span class="tooltip-url">${url}</span>
+      </div>
+    `
+    
+    document.body.appendChild(tooltip)
+    
+    // 定位tooltip
+    const rect = element.getBoundingClientRect()
+    tooltip.style.position = 'fixed'
+    tooltip.style.top = (rect.bottom + 8) + 'px'
+    tooltip.style.left = rect.left + 'px'
+    tooltip.style.zIndex = '10000'
+  }
+
+  window.hideCitationTooltip = () => {
+    const tooltip = document.getElementById('citation-tooltip')
+    if (tooltip) {
+      tooltip.remove()
+    }
   }
 }
 </script>

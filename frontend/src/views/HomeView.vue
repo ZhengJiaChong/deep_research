@@ -116,7 +116,36 @@
                   <el-icon><Document /></el-icon>
                   <span>研究报告</span>
                 </div>
-                <div class="message-text" v-html="formatMessage(msg.content)"></div>
+                <div class="message-text" v-html="formatMessage(msg.content, msg.searchResults || [])"></div>
+                
+                <!-- 引用列表面板 -->
+                <div v-if="msg.searchResults && msg.searchResults.length > 0" class="references-section">
+                  <h3 class="references-title">参考资料</h3>
+                  <div class="references-list">
+                    <div 
+                      v-for="(result, idx) in msg.searchResults" 
+                      :key="idx"
+                      :id="`citation-${idx + 1}`"
+                      class="reference-item"
+                      @click="openReference(result.url)"
+                    >
+                      <div class="reference-header">
+                        <span class="reference-number">{{ idx + 1 }}</span>
+                        <a :href="result.url" target="_blank" rel="noopener" class="reference-link" @click.stop>
+                          {{ result.title }}
+                          <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                          </svg>
+                        </a>
+                      </div>
+                      <div class="reference-source">{{ result.source || extractDomain(result.url) }}</div>
+                      <p class="reference-snippet">{{ (result.content || '').substring(0, 200) }}...</p>
+                    </div>
+                  </div>
+                </div>
+                
                 <span v-if="msg.isStreaming" class="cursor-blink">▍</span>
               </div>
             </div>
@@ -158,6 +187,7 @@ import { useRouter } from 'vue-router'
 import { useResearchStore } from '../stores/research'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
+import '@/assets/citation.css'
 import { 
   Promotion, Search, Plus, User, Service, Document, 
   ChatDotRound, ArrowDown, ArrowRight, Close
@@ -180,19 +210,61 @@ onMounted(async () => {
   await loadHistoryFromDB()
 })
 
-// 格式化消息
-const formatMessage = (content) => {
+// 格式化消息（支持Markdown和引用链接）
+const formatMessage = (content, searchResults = []) => {
   if (!content) return ''
   
-  // 使用marked库渲染Markdown
   try {
-    return marked.parse(content, {
+    let html
+    
+    // 使用marked渲染Markdown
+    html = marked.parse(content, {
       breaks: true,  // 支持换行
       gfm: true,     // GitHub风格Markdown
     })
+    
+    // 后处理：替换HTML中的所有引用标记 [1]、[2]、[3]
+    if (searchResults.length > 0) {
+      html = html.replace(/\[(\d+)\]/g, (match, num) => {
+        const index = parseInt(num) - 1
+        const result = searchResults[index]
+        
+        if (result) {
+          return `<span class="citation-link" 
+                        data-url="${result.url}" 
+                        data-title="${result.title}"
+                        data-content="${(result.content || '').substring(0, 200)}"
+                        onclick="handleCitationClick(event, ${index})"
+                        onmouseenter="showCitationTooltip(event, this)"
+                        onmouseleave="hideCitationTooltip()">
+                    <span class="citation-number">${num}</span>
+                    <span class="citation-icon">🔗</span>
+                  </span>`
+        }
+        return match // 如果没有对应的搜索结果，返回原样
+      })
+    }
+    
+    return html
   } catch (error) {
     console.error('Markdown渲染失败:', error)
     return content
+  }
+}
+
+// 打开引用链接
+const openReference = (url) => {
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+// 提取域名
+const extractDomain = (url) => {
+  try {
+    return new URL(url).hostname.replace('www.', '')
+  } catch {
+    return url
   }
 }
 
@@ -317,7 +389,8 @@ const sendMessage = async () => {
     isStreaming: false,
     statusText: '开始分析您的问题...',
     nodeInfo: [],
-    showProcess: true
+    showProcess: true,
+    searchResults: []  // 添加搜索结果数组
   })
   
   await scrollToBottom()
@@ -490,6 +563,17 @@ const streamReport = async (assistantMsgIndex, researchId) => {
         messages.value[assistantMsgIndex].isStreaming = false
         messages.value[assistantMsgIndex].statusText = '报告生成完成（流式失败）'
         reject(error)
+      },
+      // onSearchResults - 接收搜索结果数据
+      (searchResults) => {
+        console.log('📥 收到SSE searchResults事件')
+        console.log('📥 searchResults类型:', typeof searchResults)
+        console.log('📥 searchResults长度:', searchResults?.length)
+        if (searchResults && searchResults.length > 0) {
+          console.log('📥 第一条数据:', searchResults[0])
+        }
+        messages.value[assistantMsgIndex].searchResults = searchResults || []
+        console.log('✅ 已存储searchResults:', messages.value[assistantMsgIndex].searchResults.length, '个')
       }
     )
   })

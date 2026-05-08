@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # --- 基础配置 ---
     APP_NAME: str = "Deep Research API"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False  # 关闭热重载
     
     # --- 服务器配置 ---
     HOST: str = "0.0.0.0"
